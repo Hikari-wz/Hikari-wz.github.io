@@ -7,17 +7,30 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main>
-    <h1>你好，我的博客上线了！</h1>
-    <p>我是计算机专业新生，这是我的第一个 GitHub Pages 网站。</p>
-    <p><a href="https://github.com/">访问 GitHub</a></p>
-  <section>
-  <h2>我的第一篇学习笔记</h2>
-  <p>今天我学会了用 GitHub Pages 发布自己的网页。</p>
-  <p>接下来，我想在这里记录学 C++ 时遇到的问题。</p>
-</section>
+  <header class="site-header">
+    <nav class="site-nav layout" aria-label="主导航">
+      <a class="site-name" href="./">Hikari</a>
+      <div class="nav-links">
+        <a href="#notes">学习笔记</a>
+        <a class="github-link" href="https://github.com/">访问 GitHub <span aria-hidden="true">↗</span></a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <h1 id="page-title">你好，我的博客上线了！</h1>
+        <p>我是计算机专业新生，这是我的第一个 GitHub Pages 网站。</p>
+      </div>
+      <div class="hero-art" aria-hidden="true"></div>
+    </section>
+
+    <article class="note" id="notes" aria-labelledby="note-title">
+      <h2 id="note-title">我的第一篇学习笔记</h2>
+      <p>今天我学会了用 GitHub Pages 发布自己的网页。</p>
+      <p>接下来，我想在这里记录学 C++ 时遇到的问题。</p>
+    </article>
   </main>
 </body>
 </html>
-
-<link rel="stlyeshieet" href="style.css">
