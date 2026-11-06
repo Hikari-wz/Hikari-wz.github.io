@@ -196,6 +196,62 @@ main {
   color: var(--muted);
 }
 
+.note h3 {
+  margin: 1.75rem 0 .6rem;
+  font-size: 1.15rem;
+}
+
+.note code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.note :not(pre) > code {
+  padding: .1em .28em;
+  border-radius: .25rem;
+  background: #f0eee8;
+}
+
+.note pre {
+  margin: .85rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: .6rem;
+  background: var(--hero);
+  color: #fff8e9;
+  font-size: .875rem;
+}
+
+.note-table {
+  margin: .85rem 0;
+  overflow-x: auto;
+}
+
+.note table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .925rem;
+}
+
+.note th,
+.note td {
+  padding: .55rem .7rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.note thead {
+  background: #f0eee8;
+}
+
+.note tbody th {
+  font-weight: 500;
+}
+
+.note :is(pre, .note-table):focus-visible {
+  outline: 2px solid #27548e;
+  outline-offset: 3px;
+}
+
 @media (max-width: 40rem) {
   .layout {
     width: calc(100% - 2rem);

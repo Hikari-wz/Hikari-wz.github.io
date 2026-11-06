@@ -24,6 +24,91 @@
         <p>我是计算机专业新生，这是我的第一个 GitHub Pages 网站。</p>
       </div>
       <div class="hero-art" aria-hidden="true"></div>
+    </section>
+
+    <article class="note" id="notes" aria-labelledby="note-title">
+      <h2 id="note-title">C++ STL 学习笔记（一）——vector</h2>
+      <p>今天开始系统学习 STL，先从 <code>vector</code> 入手。</p>
+      <p><code>vector</code> 可以理解为动态数组，不需要像普通数组一样提前确定长度，使用时需要包含 <code>&lt;vector&gt;</code> 头文件。</p>
+
+      <h3>1. 基本操作</h3>
+      <pre><code class="language-cpp">vector&lt;int&gt; a;             // 创建空 vector
+vector&lt;int&gt; b(5);          // 5 个元素，初始值为 0
+vector&lt;int&gt; c(5, 10);      // 5 个元素，初始值为 10
+vector&lt;int&gt; d = {1, 2, 3};
+
+a.push_back(10);           // 末尾添加元素
+a.pop_back();              // 删除末尾元素
+a.size();                  // 元素数量
+a.empty();                 // 判断是否为空
+a[0];                      // 下标访问
+a.front();                 // 第一个元素
+a.back();                  // 最后一个元素</code></pre>
+      <p>注意 <code>size()</code> 返回元素数量，下标仍然从 0 开始。<code>pop_back()</code>、<code>front()</code>、<code>back()</code> 都不能对空 vector 使用。</p>
+
+      <h3>2. 遍历</h3>
+      <p>普通 for 循环：</p>
+      <pre><code class="language-cpp">for (int i = 0; i &lt; a.size(); i++) {
+    cout &lt;&lt; a[i] &lt;&lt; " ";
+}</code></pre>
+      <p>范围 for 循环：</p>
+      <pre><code class="language-cpp">for (int x : a) {
+    cout &lt;&lt; x &lt;&lt; " ";
+}</code></pre>
+      <p>如果需要修改原来的元素，要使用引用：</p>
+      <pre><code class="language-cpp">for (int &amp;x : a) {
+    x *= 2;
+}</code></pre>
+
+      <h3>3. 排序</h3>
+      <pre><code class="language-cpp">sort(a.begin(), a.end());                  // 升序
+sort(a.begin(), a.end(), greater&lt;int&gt;());  // 降序</code></pre>
+      <p><code>begin()</code> 指向第一个元素，<code>end()</code> 指向最后一个元素的后面。</p>
+      <p>STL 中很多函数使用左闭右开区间 <code>[begin, end)</code>。</p>
+
+      <h3>4. 迭代器</h3>
+      <p>迭代器可以暂时理解成类似指针的东西。</p>
+      <pre><code class="language-cpp">vector&lt;int&gt; a = {10, 20, 30};
+
+auto it = a.begin();
+
+cout &lt;&lt; *it;  // 10
+it++;
+cout &lt;&lt; *it;  // 20</code></pre>
+      <p>也可以用迭代器遍历：</p>
+      <pre><code class="language-cpp">for (auto it = a.begin(); it != a.end(); it++) {
+    cout &lt;&lt; *it &lt;&lt; " ";
+}</code></pre>
+      <p>注意不能解引用 <code>end()</code>。</p>
+
+      <h3>5. 去重</h3>
+      <pre><code class="language-cpp">vector&lt;int&gt; a = {3, 1, 2, 3, 2, 1};
+
+sort(a.begin(), a.end());
+a.erase(unique(a.begin(), a.end()), a.end());</code></pre>
+      <p>结果为 <code>{1, 2, 3}</code>。</p>
+      <p>这里有个容易搞错的地方：<strong><code>unique()</code> 不会真正删除元素</strong>，只是把相邻重复元素压缩到有效区间之外，并返回有效区间末尾的迭代器。</p>
+      <p>所以一般先 <code>sort()</code>，再配合 <code>erase()</code> 删除多余元素。</p>
+
+      <h3 id="complexity-title">6. 时间复杂度</h3>
+      <div class="note-table" role="region" aria-labelledby="complexity-title" tabindex="0">
+        <table aria-labelledby="complexity-title">
+          <thead>
+            <tr><th scope="col">操作</th><th scope="col">时间复杂度</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">下标访问</th><td>O(1)</td></tr>
+            <tr><th scope="row"><code>push_back()</code></th><td>均摊 O(1)</td></tr>
+            <tr><th scope="row"><code>pop_back()</code></th><td>O(1)</td></tr>
+            <tr><th scope="row"><code>sort()</code></th><td>O(n log n)</td></tr>
+            <tr><th scope="row"><code>unique()</code></th><td>O(n)</td></tr>
+            <tr><th scope="row"><code>erase()</code></th><td>O(n)（最坏情况）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>今天主要掌握了 vector 的创建、增删、遍历、排序和去重。相比普通数组，写起来方便了不少。</p>
+      <p>下一部分准备学 <code>pair</code>、<code>tuple</code> 和自定义排序。</p>
     </article>
   </main>
 </body>
