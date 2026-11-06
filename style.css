@@ -176,17 +176,56 @@ main {
 }
 
 .note {
+  --note-padding: clamp(1.25rem, 4vw, 2.75rem);
   max-width: 48rem;
   margin-top: clamp(1.5rem, 4vw, 2.5rem);
-  padding: clamp(1.5rem, 4vw, 2.75rem);
   scroll-margin-top: 1rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: #fffdfa;
 }
 
+.note summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem var(--note-padding);
+  border-radius: 1rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.note summary::-webkit-details-marker {
+  display: none;
+}
+
+.note summary:hover {
+  background: #f0eee8;
+}
+
+.note summary::after {
+  flex: none;
+  width: .5rem;
+  height: .5rem;
+  margin-inline-end: .2rem;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  content: "";
+}
+
+.note details[open] summary::after {
+  transform: rotate(225deg);
+}
+
+.note-body {
+  padding: .75rem var(--note-padding) var(--note-padding);
+  border-top: 1px solid var(--line);
+}
+
 .note h2 {
-  margin: 0 0 .8rem;
+  margin: 0;
   font-size: clamp(1.25rem, 3vw, 1.65rem);
   line-height: 1.4;
 }
@@ -247,7 +286,7 @@ main {
   font-weight: 500;
 }
 
-.note :is(pre, .note-table):focus-visible {
+.note :is(summary, pre, .note-table):focus-visible {
   outline: 2px solid #27548e;
   outline-offset: 3px;
 }
