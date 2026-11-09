@@ -291,6 +291,46 @@ main {
   outline-offset: 3px;
 }
 
+.blog-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.module {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  scroll-margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #fffdfa;
+}
+
+.module h2 {
+  margin: 0 0 .75rem;
+  font-size: 1.3rem;
+  line-height: 1.4;
+}
+
+.module h3 {
+  margin: 0 0 .35rem;
+  font-size: 1rem;
+}
+
+.module p,
+.module ol {
+  margin: 0;
+  color: var(--muted);
+}
+
+.module ol {
+  padding-inline-start: 1.35rem;
+}
+
+.module a {
+  text-underline-offset: .2em;
+}
+
 @media (max-width: 40rem) {
   .layout {
     width: calc(100% - 2rem);
