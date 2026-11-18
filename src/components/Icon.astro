@@ -1,0 +1,22 @@
+---
+const paths = {
+  book: 'M12 6.3C8.7 4.3 5.6 4.1 2 5.1v13.3c3.7-1 6.8-.7 10 1.5 3.2-2.2 6.3-2.5 10-1.5V5.1c-3.6-1-6.7-.8-10 1.2Zm0 0v13.6',
+  mountain: 'm2 19 7.3-12 4.1 6.2 2.9-4.4L22 19H2Zm4.7-7.8 2.6 1.5 2-2.4 M17.7 3.3a1.7 1.7 0 1 0 .01 0',
+  shapes: 'm7 2 4.5 7.5h-9L7 2Zm9 1h5v6h-5zM3.5 14h7v7h-7zM18 13a4 4 0 1 0 .01 0Z',
+  coffee: 'M3 9h13v5a6.5 6.5 0 0 1-13 0V9Zm13 1h1.6a3 3 0 0 1 0 6H16M2 21h17M6 6c-2-2 2-2 0-4m5 4c-2-2 2-2 0-4',
+  arrow: 'M4 12h15m-6-6 6 6-6 6', down: 'M12 4v15m-6-6 6 6 6-6',
+  diagonal: 'M6 18 18 6M6 6h12v12', back: 'M20 12H5m6-6-6 6 6 6',
+  system: 'M3 4h18v13H3zM8 21h8m-4-4v4',
+  sun: 'M12 7a5 5 0 1 1-.01 0ZM12 1v2m0 18v2M1 12h2m18 0h2M4 4l1.6 1.6m12.8 12.8L20 20M4 20l1.6-1.6M18.4 5.6 20 4',
+  moon: 'M20.4 14.3a8.6 8.6 0 0 1-11-11A9.1 9.1 0 1 0 20.4 14.3Z',
+  menu: 'M3 6h18M3 12h18M3 18h18', chevron: 'm6 9 6 6 6-6',
+  feather: 'm4 20 11-11m-8 8c-1.2-2-1-5 1-7l5-5a4 4 0 1 1 6 6l-5 5c-2 2-5 2-7 1Z',
+  clock: 'M12 2a10 10 0 1 0 .01 0ZM12 6v6l4 2',
+  plan: 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16m-12 4h3',
+  check: 'm3 6 2 2 3-4m3 2h9M3 13l2 2 3-4m3 2h9',
+  chart: 'M4 3v17h17M8 16v-4m5 4V7m5 9v-6'
+};
+interface Props { name: keyof typeof paths; size?: number }
+const { name, size = 20 } = Astro.props;
+---
+<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>

@@ -1,0 +1,38 @@
+---
+import { getCollection } from 'astro:content';
+import { Image } from 'astro:assets';
+import Site from '@/layouts/Site.astro';
+import EntryList from '@/components/EntryList.astro';
+import Icon from '@/components/Icon.astro';
+import print from '@/assets/umezawa.webp';
+import { site, spaces } from '@/data/site';
+import { newestFirst } from '@/lib/entries';
+import '@/styles/home.css';
+const latest = (await Promise.all([getCollection('journal'), getCollection('learn'), getCollection('lab')])).flat().sort(newestFirst).slice(0, 4);
+---
+<Site>
+  <section class="home-intro" aria-labelledby="greeting">
+    <div class="hero-copy">
+      <p class="eyebrow"><span></span>HIKARI’S PERSONAL SPACE</p>
+      <h1 id="greeting">你好，世界<span class="stop">。</span></h1>
+      <p class="hello" lang="en">Hello, world.</p>
+      <p class="intro-line">{site.description}</p>
+      <div class="hero-actions"><a class="button" href="#spaces">探索空间 <Icon name="down" size={16} /></a><a class="quiet-link" href="/about/">关于我 <Icon name="arrow" size={15} /></a></div>
+    </div>
+    <figure class="print">
+      <div class="print-mat"><Image src={print} alt="葛饰北斋的木版画，蓝色富士山下，白鹤站在青绿的湿地间。" widths={[440, 720, 1080]} sizes="(max-width: 740px) 92vw, (max-width: 1250px) 47vw, 560px" format="webp" loading="eager" fetchpriority="high" /></div>
+      <figcaption><span>葛饰北斋 <i>/</i> 相州梅泽庄</span><a href="https://www.metmuseum.org/art/collection/search/36501" lang="en">The Met <Icon name="diagonal" size={12}/></a></figcaption>
+    </figure>
+  </section>
+  <section id="spaces" class="home-section" aria-labelledby="space-heading">
+    <div class="section-heading"><h2 id="space-heading">探索空间</h2><span lang="en">Spaces</span></div>
+    <div class="space-grid">{spaces.map(s => <a class:list={['space-card', s.color]} href={s.href}>
+      <div class="space-top"><span class="space-icon"><Icon name={s.icon} size={22}/></span><Icon name="diagonal" size={16}/></div>
+      <h3>{s.name} <em lang="en">{s.en}</em></h3><p>{s.note}</p>
+    </a>)}</div>
+  </section>
+  <section class="home-section updates" aria-labelledby="updates-heading">
+    <div class="section-heading"><h2 id="updates-heading">最近更新</h2><span lang="en">Latest entries</span></div>
+    <EntryList entries={latest}/>
+  </section>
+</Site>

@@ -1,0 +1,8 @@
+---
+import { site } from '@/data/site';
+import Icon from './Icon.astro';
+---
+<footer class="footer"><div class="wrap footer-inner">
+  <span>© {new Date().getUTCFullYear()} {site.name}</span>
+  <a href={site.github}>GitHub <Icon name="diagonal" size={14}/></a>
+</div></footer>
