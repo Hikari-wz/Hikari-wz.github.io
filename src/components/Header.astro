@@ -7,7 +7,7 @@ const active = (href: string) => href === '/' ? path === '/' : path.startsWith(h
 ---
 <header class="header">
   <div class="wrap header-inner">
-    <a class="brand" href="/"><img alt="" src="/mark.svg" width="32" height="32" />{site.name}</a>
+    <a class="brand" href="/" lang="en"><img alt="" src="/mark.svg" width="32" height="32" />{site.name}</a>
     <nav aria-label="主导航" class="desktop-nav">{nav.map(link => <a href={link.href} aria-current={active(link.href) ? (path === link.href ? 'page' : 'location') : undefined}>{link.label}</a>)}</nav>
     <div class="header-tools"><ThemeControl />
       <details class="mobile-menu">

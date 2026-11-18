@@ -1,0 +1,21 @@
+---
+import { getCollection } from 'astro:content';
+import Site from '@/layouts/Site.astro';
+import LearnNav from '@/components/LearnNav.astro';
+import PageIntro from '@/components/PageIntro.astro';
+import { topics } from '@/data/site';
+import { href } from '@/lib/entries';
+import '@/styles/sections.css';
+const notes = (await getCollection('learn')).sort((a,b) => a.data.order - b.data.order || a.id.localeCompare(b.id));
+---
+<Site title="学习空间" description="按学科、章节和标签整理的个人知识库。">
+  <PageIntro name="学习空间" en="Learn" description="按学科整理笔记，把练习中弄懂的事一页页留下来。" />
+  <div class="learn-layout"><LearnNav />
+    <div class="knowledge">{Object.entries(topics).map(([key, label]) => {
+      const group = notes.filter(e => e.data.topic === key);
+      return <section id={key}><h2 class="body-heading">{label}</h2>
+        {group.length ? <ul>{group.map(e => <li><a class="knowledge-entry" href={href(e)}><span><small>{e.data.section}</small>{e.data.title} {e.data.demo && <b class="demo">Demo</b>}</span><span aria-hidden="true">→</span></a></li>)}</ul> : <p class="muted">笔记待补充。</p>}
+      </section>;
+    })}</div>
+  </div>
+</Site>

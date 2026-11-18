@@ -1,4 +1,5 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 import { categories, topics } from './data/site';
 
@@ -30,6 +31,6 @@ export const collections = {
   }),
   lab: defineCollection({
     loader: files('lab'),
-    schema: z.object({ ...common, projectUrl: z.string().url().startsWith('https://').optional() })
+    schema: z.object({ ...common, projectUrl: z.url({ protocol: /^https$/ }).optional() })
   })
 };

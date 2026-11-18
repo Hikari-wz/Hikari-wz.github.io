@@ -1,0 +1,21 @@
+:root {
+  color-scheme: light dark;
+  --paper: light-dark(#faf9f5, #1a201f);
+  --panel: light-dark(#f1f0e9, #252d29);
+  --ink: light-dark(#202e2d, #eeeae0);
+  --secondary: light-dark(#53605b, #bdc8bd);
+  --muted: light-dark(#636b62, #adb7ad);
+  --rule: light-dark(#d6d9cf, #424b44);
+  --accent: light-dark(#99482e, #e6a080);
+  --button: light-dark(#28493e, #a5c8b0);
+  --button-text: light-dark(#fffdf5, #16271f);
+  --focus: light-dark(#116477, #95d8eb);
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Hiragino Sans", sans-serif;
+  --serif: "Baskervville", Georgia, "Songti SC", "Noto Serif CJK SC", "Noto Serif CJK JP", "SimSun", serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --gap: clamp(1.25rem, 4vw, 4rem);
+  --radius: .65rem;
+  --measure: 72rem;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

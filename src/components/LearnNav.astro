@@ -1,0 +1,34 @@
+---
+import { getCollection } from 'astro:content';
+import { href } from '@/lib/entries';
+import { topics } from '@/data/site';
+import Icon from './Icon.astro';
+const entries = (await getCollection('learn')).sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id));
+const groups = Object.entries(topics).map(([key, label]) => {
+  const notes = entries.filter(e => e.data.topic === key);
+  return { key, label, sections: [...new Set(notes.map(e => e.data.section))].map(name => ({name, notes: notes.filter(e => e.data.section === name)})) };
+});
+const path = Astro.url.pathname;
+---
+<aside class="learn-sidebar">
+  <details open>
+    <summary>知识库目录 <Icon name="chevron" size={15}/></summary>
+    <nav aria-label="学习目录">
+      <a href="/learn/" aria-current={path === '/learn/' ? 'page' : undefined}>学习概览</a>
+      {groups.map(group => <div class="topic"><a class="topic-name" href={'/learn/#' + group.key}>{group.label}</a>
+        {group.sections.map(section => <div class="subtopic"><span>{section.name}</span>
+          {section.notes.map(note => <a href={href(note)} aria-current={path === href(note) ? 'page' : undefined}>{note.data.title}</a>)}
+        </div>)}
+      </div>)}
+    </nav>
+  </details>
+  <slot name="search" />
+</aside>
+
+<script>
+  const directory = document.querySelector<HTMLDetailsElement>('.learn-sidebar details')!;
+  const compact = matchMedia('(max-width: 740px)');
+  function setLayout() { directory.open = !compact.matches; }
+  setLayout();
+  compact.addEventListener('change', setLayout);
+</script>

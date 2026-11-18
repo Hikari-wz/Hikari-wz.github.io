@@ -1,0 +1,17 @@
+---
+import { getCollection } from 'astro:content';
+import { categories } from '@/data/site';
+import { newestFirst } from '@/lib/entries';
+import EntryList from './EntryList.astro';
+import PageIntro from './PageIntro.astro';
+interface Props { category?: keyof typeof categories }
+const { category } = Astro.props;
+const entries = (await getCollection('journal', e => !category || e.data.category === category)).sort(newestFirst);
+---
+<PageIntro name="记录空间" en="Journal" description="旅行见闻、摄影和生活里的零散思考。" />
+<nav class="filters" aria-label="记录分类">
+  <a href="/journal/" aria-current={!category ? 'page' : undefined}>全部</a>
+  {Object.entries(categories).map(([key, label]) => <a href={'/journal/category/' + key + '/'} aria-current={key === category ? 'page' : undefined}>{label}</a>)}
+</nav>
+<div class="section-heading"><h2>{category ? categories[category] : '全部记录'}</h2><span>{entries.length} 篇</span></div>
+<EntryList entries={entries} empty={'这里会收录' + (category ? categories[category] : '') + '记录，目前还没有文章。'} />
