@@ -3,164 +3,274 @@ title: 日本十二日
 description: 2026 年 6 月 12 日至 23 日，从东京到富士五湖、伊豆和镰仓。清晨五点去拍鸟居和富士山，后来在下田的夜路上，用一包薯片向陌生人道谢。
 date: 2026-11-19
 category: travel
+format: photo-journal
 tags: [日本, 东京, 富士五湖, 伊豆, 镰仓, 摄影]
 cover:
   src: ./japan-twelve-days/tokyo-skyline.webp
   alt: 从高处望去，云层下的东京一直延伸到远处
 ---
 
-import PhotoSpread from '@/components/PhotoSpread.astro';
+import Plate from '@/components/album/Plate.astro';
+import Story from '@/components/album/Story.astro';
+import Itinerary from '@/components/album/Itinerary.astro';
 
-*摄影与日记 ／ Ryan　·　2026 年 6 月 12 日至 23 日*
+import akihabara from './japan-twelve-days/akihabara.webp';
+import arrivalFromAir from './japan-twelve-days/arrival-from-air.webp';
+import asakusaFortune from './japan-twelve-days/asakusa-fortune.webp';
+import asakusaPagoda from './japan-twelve-days/asakusa-pagoda.webp';
+import asakusaStreet from './japan-twelve-days/asakusa-street.webp';
+import fujiFlowers from './japan-twelve-days/fuji-flowers.webp';
+import fujiInClouds from './japan-twelve-days/fuji-in-clouds.webp';
+import fujiReflection from './japan-twelve-days/fuji-reflection.webp';
+import fujiTorii from './japan-twelve-days/fuji-torii.webp';
+import hanazono from './japan-twelve-days/hanazono.webp';
+import hotCocoa from './japan-twelve-days/hot-cocoa.webp';
+import izuPlatform from './japan-twelve-days/izu-platform.webp';
+import izuTown from './japan-twelve-days/izu-town.webp';
+import jogasaki from './japan-twelve-days/jogasaki.webp';
+import kabukichoDay from './japan-twelve-days/kabukicho-day.webp';
+import kabukichoNight from './japan-twelve-days/kabukicho-night.webp';
+import kamakuraPortrait from './japan-twelve-days/kamakura-portrait.webp';
+import naritaExpress from './japan-twelve-days/narita-express.webp';
+import naritaTicket from './japan-twelve-days/narita-ticket.webp';
+import railCrossing from './japan-twelve-days/rail-crossing.webp';
+import routeFuji from './japan-twelve-days/route-fuji.webp';
+import routeIzu from './japan-twelve-days/route-izu.webp';
+import routeKamakura from './japan-twelve-days/route-kamakura.webp';
+import routeNarita from './japan-twelve-days/route-narita.webp';
+import routeOverview from './japan-twelve-days/route-overview.webp';
+import routeTokyo from './japan-twelve-days/route-tokyo.webp';
+import shibuyaCrossing from './japan-twelve-days/shibuya-crossing.webp';
+import shibuyaPortrait from './japan-twelve-days/shibuya-portrait.webp';
+import shimodaAquarium from './japan-twelve-days/shimoda-aquarium.webp';
+import shirahama from './japan-twelve-days/shirahama.webp';
+import shonanGtr from './japan-twelve-days/shonan-gtr.webp';
+import shonanStreet from './japan-twelve-days/shonan-street.webp';
+import tokyoFromAir from './japan-twelve-days/tokyo-from-air.webp';
+import tokyoSkyline from './japan-twelve-days/tokyo-skyline.webp';
+import towelCrane from './japan-twelve-days/towel-crane.webp';
+import towerRecords from './japan-twelve-days/tower-records.webp';
+import tsumekizaki from './japan-twelve-days/tsumekizaki.webp';
+import yamanakako from './japan-twelve-days/yamanakako.webp';
 
-## 六月的东京上空
+<div className="album-cover">
 
-<PhotoSpread caption="降落前">
+<div className="cover-type">
 
-![飞抵东京前，从舷窗看夜色中的城市灯光](./japan-twelve-days/arrival-from-air.webp)
+<p className="imprint">旅行写真帖 ／ RYAN</p>
 
-</PhotoSpread>
+<h1>日本十二日</h1>
 
-> “我已经迫不及待的要去探索这个城市了。”
+<p className="cover-date">2026.06.12 — 06.23</p>
 
-*6 月 11 日飞抵东京前，写在日记里。*
+<p>东京 · 富士五湖 · 伊豆 · 镰仓</p>
+
+<a className="pdf-link" href="/albums/japan-twelve-days.pdf">查看原版 PDF ↗</a>
+
+</div>
+
+<Plate src={tokyoSkyline} alt="从高处望去，云层下的东京一直延伸到远处" size="half" priority />
+
+</div>
+
+<nav className="album-index" aria-label="纪念册章节">
+<a href="#overview">旅程总览</a>
+<a href="#tokyo">东京</a>
+<a href="#fuji">富士五湖</a>
+<a href="#izu">伊豆</a>
+<a href="#kamakura">镰仓</a>
+<a href="#return">重返东京</a>
+<a href="#departure">归途</a>
+<a href="#keepsakes">旅途拾零</a>
+<a href="#epilogue">尾声</a>
+</nav>
+
+<Story id="preface" title="六月的东京上空" layout="spread" chapter="序 ／ 回望">
+
+<div className="opening">
+
+<Plate src={arrivalFromAir} alt="飞抵东京前，从舷窗看夜色中的城市灯光" caption="降落前" size="half" />
+
+<blockquote>“我已经迫不及待的要去探索这个城市了。”<cite>6 月 11 日飞抵东京前，写在日记里。</cite></blockquote>
+
+</div>
 
 出发前，我算过一趟趟车要花多少钱，也算过几点离开才赶得上富士山的日落。一个人旅行，能省下一段车费、少换一次车，都值得把路线重新排一遍。
 
 过了近半年，我又翻到了当时规划行程的对话。那时排得真满。真走起来，头几天，每天能走到三万步左右，难怪我后来会说，自己高估了体力。
 
-> “好开心也好累”
+<blockquote>“好开心也好累”<cite>十一月，重读出发前的对话。</cite></blockquote>
 
-*十一月，重读出发前的对话。*
+</Story>
 
-**山与海之间**
+<Story id="overview" title="山与海之间" layout="route" chapter="旅程总览" meta="12 天 11 晚">
+
+<Plate src={routeOverview} alt="从东京、富士五湖到伊豆半岛、镰仓，再回东京的行程示意图" caption="朱红色箭头表示旅行方向，连线按停留先后绘制。" map />
+
+<p className="small-note">深朱　有记录的铁路段　／　浅朱　概略走廊</p>
+
+<p className="small-note">地图资料 · 日本国土地理院 · 国土交通省 N02 · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap 贡献者</a></p>
 
 从东京往西到富士五湖，再沿伊豆半岛南下。6 月 20 日离开下田前往镰仓，旅程最后回到涩谷，从那里搭车去成田机场。
 
-<PhotoSpread caption="朱红色箭头表示旅行方向，连线按停留先后绘制。深朱色标出有记录的铁路段，浅朱色表示概略走廊。">
+</Story>
 
-![从东京、富士五湖到伊豆半岛、镰仓，再回东京的行程示意图](./japan-twelve-days/route-overview.webp)
+<Story id="plan" title="出发前的十二天" layout="spread" meta="2026 年 6 月 12–23 日">
 
-</PhotoSpread>
+<Itinerary days={[
+  [
+    "D1 · 6/12",
+    "新宿、涩谷、SHIBUYA SKY，夜回新宿。",
+    "新宿、涩谷。登上 SHIBUYA SKY，下午走到明治神宫。"
+  ],
+  [
+    "D2 · 6/13",
+    "明治神宫、原宿、秋叶原，住浅草。",
+    "浅草寺、雷门、隅田公园。"
+  ],
+  [
+    "D3 · 6/14",
+    "浅草寺、雷门、仲见世，乘巴士去河口湖。天上山、罗森。",
+    "发烧，在酒店躺了一天。"
+  ],
+  [
+    "D4 · 6/15",
+    "天空鸟居、忠灵塔、下吉田，到平野之滨等日落。",
+    "傍晚乘巴士抵达河口湖，云厚，看不见富士山。"
+  ],
+  [
+    "D5 · 6/16",
+    "早晨沿山中湖骑行，经御殿场、热海去伊豆高原。",
+    "清晨拍富士山，去了天空鸟居和下吉田，下午在山中湖环湖。"
+  ],
+  [
+    "D6 · 6/17",
+    "大室山、城崎海岸、门胁吊桥，傍晚到下田。",
+    "到伊豆高原，在伊东入住，去了城崎海岸。"
+  ],
+  [
+    "D7 · 6/18",
+    "白滨海岸、下田公园，海边看日落。",
+    "大室山因天气关闭，随后到了下田。夜里迷路，获人相助。"
+  ],
+  [
+    "D8 · 6/19",
+    "下田佩里路，经热海去镰仓，住由比滨。",
+    "还在下田。去了爪木崎，赶上末班公交。"
+  ],
+  [
+    "D9 · 6/20",
+    "八幡宫、小町通、长谷寺、七里滨、江之岛，经大船回东京。",
+    "上午在下田海中水族馆，下午乘舞女号往镰仓。"
+  ],
+  [
+    "D10 · 6/21",
+    "自由日。也想过在镰仓和东京之间加一站横滨。",
+    "6/21–22 合记：镰仓见朋友，随后一起回东京逛秋叶原。"
+  ],
+  [
+    "D11 · 6/22",
+    "下北泽逛古着店，找一家 Live House，再去唱片店。",
+    "接上条：朋友离开后，我独自逛了涩谷。"
+  ],
+  [
+    "D12 · 6/23",
+    "整理行李，去成田机场。",
+    "涩谷唱片店，下午从涩谷搭成田特快去机场。"
+  ]
+]} />
 
-地图资料：日本国土地理院、国土交通省 N02、[© OpenStreetMap 贡献者](https://www.openstreetmap.org/copyright)。
+</Story>
 
-## 出发前的十二天
+<Story id="tokyo" title="新宿到明治神宫" layout="route" chapter="东京" meta="06.12 — 06.13 ／ 东京 D1–2 · 6/12–13">
 
-| 日期 | 原计划 | 实际行程 |
-| --- | --- | --- |
-| D1 · 6/12 | 新宿、涩谷、SHIBUYA SKY，夜回新宿。 | 新宿、涩谷。登上 SHIBUYA SKY，下午走到明治神宫。 |
-| D2 · 6/13 | 明治神宫、原宿、秋叶原，住浅草。 | 浅草寺、雷门、隅田公园。 |
-| D3 · 6/14 | 浅草寺、雷门、仲见世，乘巴士去河口湖。天上山、罗森。 | 发烧，在酒店躺了一天。 |
-| D4 · 6/15 | 天空鸟居、忠灵塔、下吉田，到平野之滨等日落。 | 傍晚乘巴士抵达河口湖，云厚，看不见富士山。 |
-| D5 · 6/16 | 早晨沿山中湖骑行，经御殿场、热海去伊豆高原。 | 清晨拍富士山，去了天空鸟居和下吉田，下午在山中湖环湖。 |
-| D6 · 6/17 | 大室山、城崎海岸、门胁吊桥，傍晚到下田。 | 到伊豆高原，在伊东入住，去了城崎海岸。 |
-| D7 · 6/18 | 白滨海岸、下田公园，海边看日落。 | 大室山因天气关闭，随后到了下田。夜里迷路，获人相助。 |
-| D8 · 6/19 | 下田佩里路，经热海去镰仓，住由比滨。 | 还在下田。去了爪木崎，赶上末班公交。 |
-| D9 · 6/20 | 八幡宫、小町通、长谷寺、七里滨、江之岛，经大船回东京。 | 上午在下田海中水族馆，下午乘舞女号往镰仓。 |
-| D10 · 6/21 | 自由日。也想过在镰仓和东京之间加一站横滨。 | 6/21–22 合记：镰仓见朋友，随后一起回东京逛秋叶原。 |
-| D11 · 6/22 | 下北泽逛古着店，找一家 Live House，再去唱片店。 | 接上条：朋友离开后，我独自逛了涩谷。 |
-| D12 · 6/23 | 整理行李，去成田机场。 | 涩谷唱片店，下午从涩谷搭成田特快去机场。 |
+<div className="opening">
 
-## 东京 · 新宿、涩谷与浅草
+<Plate src={shibuyaPortrait} alt="在 SHIBUYA SKY 观景台，背后是东京的天际线" size="half" />
 
-**新宿到明治神宫**
+<p>12 日上午从新宿去了涩谷，在 SHIBUYA SKY 看东京。明治神宫原本排在第二天，这天下午我就走到了那里。</p>
 
-*D1–2 · 6/12–13*
+</div>
 
-12 日上午从新宿去了涩谷，在 SHIBUYA SKY 看东京。明治神宫原本排在第二天，这天下午我就走到了那里。
+<Plate src={routeTokyo} alt="新宿、涩谷与明治神宫，以及浅草一带的步行示意" caption="6 月 12 日，新宿至明治神宫 ／ 6 月 13 日，浅草一带" map />
 
-<PhotoSpread>
+</Story>
 
-![在 SHIBUYA SKY 观景台，背后是东京的天际线](./japan-twelve-days/shibuya-portrait.webp)
+<Story id="glass" title="隔着玻璃看涩谷" layout="feature">
 
-</PhotoSpread>
-
-<PhotoSpread caption="6 月 12 日，新宿至明治神宫 ／ 6 月 13 日，浅草一带">
-
-![新宿、涩谷与明治神宫，以及浅草一带的步行示意](./japan-twelve-days/route-tokyo.webp)
-
-</PhotoSpread>
-
-**隔着玻璃看涩谷**
+<Plate src={shibuyaCrossing} alt="透过玻璃俯瞰涩谷的铁轨与十字路口" />
 
 铁轨横在近处，远一点才是十字路口。上午在观景台拍的照片带上了玻璃反光，我后来还问过，能不能用 Lightroom 把它去掉。
 
-<PhotoSpread>
+</Story>
 
-![透过玻璃俯瞰涩谷的铁轨与十字路口](./japan-twelve-days/shibuya-crossing.webp)
+<Story id="cocoa" title="一杯热可可" layout="portrait" meta="D1 · 6/12">
 
-</PhotoSpread>
-
-**一杯热可可**
-
-*D1 · 6/12*
+<Plate src={hotCocoa} alt="神宫前窗台上的热可可，栏杆外是鸟居" size="half" />
 
 逛完涩谷和明治神宫，背包压得腰疼，我在神宫前的咖啡馆坐了下来。那天喝的是热可可。纸杯后面，隔着栏杆，还能看见刚刚走过的鸟居。
 
-<PhotoSpread>
+</Story>
 
-![神宫前窗台上的热可可，栏杆外是鸟居](./japan-twelve-days/hot-cocoa.webp)
+<Story id="kabukicho" title="歌舞伎町的两种光" layout="spread" meta="新宿 ／ 歌舞伎町 D1–2 · 6/12–13">
 
-</PhotoSpread>
+<div className="diptych">
 
-**歌舞伎町的两种光**
+<Plate src={kabukichoDay} alt="白天的歌舞伎町，街角楼上挂着 EVA 的广告" caption="白天抬头，楼上是《EVA》的巨幅广告。" size="half" />
 
-*D1–2 · 6/12–13*
+<Plate src={kabukichoNight} alt="夜里的歌舞伎町，灯牌和小旗亮起" caption="入夜后，街灯下的小旗写着「歌舞伎町」，一面接一面，往人群深处排过去。" size="half" />
 
-白天抬头，楼上是《EVA》的巨幅广告。入夜后，街灯下的小旗写着「歌舞伎町」，一面接一面，往人群深处排过去。
+</div>
 
-<PhotoSpread pair>
+</Story>
 
-![白天的歌舞伎町，街角楼上挂着 EVA 的广告](./japan-twelve-days/kabukicho-day.webp)
+<Story id="fortune" title="浅草的塔与第十八签" layout="spread" meta="06.13 ／ 雷门 · 浅草寺 · 隅田公园 D2 · 6/13">
 
-![夜里的歌舞伎町，灯牌和小旗亮起](./japan-twelve-days/kabukicho-night.webp)
+<div className="diptych uneven">
 
-</PhotoSpread>
+<Plate src={asakusaPagoda} alt="晴空下的浅草寺五重塔" size="half" />
 
-**浅草的塔与第十八签**
+<Plate src={asakusaFortune} alt="手上拿着浅草寺第十八签，签文为吉" caption="第十八 吉　／　離暗出明時" size="small" />
 
-*D2 · 6/13*
+</div>
 
 原本留给第三天早晨的浅草，第二天就逛完了。从浅草寺和雷门，一路走到了隅田公园。
 
-<PhotoSpread pair caption="第十八　吉　／　離暗出明時">
+</Story>
 
-![晴空下的浅草寺五重塔](./japan-twelve-days/asakusa-pagoda.webp)
+<Story id="streets" title="鸟居与街角" layout="spread" meta="新宿 · 浅草 D1–2 · 6/12–13">
 
-![手上拿着浅草寺第十八签，签文为吉](./japan-twelve-days/asakusa-fortune.webp)
+<div className="diptych">
 
-</PhotoSpread>
+<Plate src={hanazono} alt="从新宿街边望向花园神社的入口" caption="新宿，花园神社。" size="half" />
 
-**鸟居与街角**
+<Plate src={asakusaStreet} alt="浅草公园本通的行人和沿街店面" caption="浅草，公园本通。" size="half" />
 
-*D1–2 · 6/12–13*
+</div>
 
-<PhotoSpread pair caption="新宿，花园神社。 浅草，公园本通。">
+</Story>
 
-![从新宿街边望向花园神社的入口](./japan-twelve-days/hanazono.webp)
+<Story id="hotel" title="留在酒店的一天" layout="quiet" meta="06.14 — 06.15 ／ 浅草藏前 D3–4 · 6/14–15">
 
-![浅草公园本通的行人和沿街店面](./japan-twelve-days/asakusa-street.webp)
-
-</PhotoSpread>
-
-**留在酒店的一天**
-
-*D3–4 · 6/14–15*
-
-*6 月 14 日，在东京。* **38.4 °C**
+<p className="stat">38.4 °C<small>6 月 14 日，在东京。</small></p>
 
 在东京发了烧，一个人在酒店躺了一天。到 15 日写日记时，烧已经退了。
 
 那天我又想起在飞机上看见的东京。高中时向往了三年的地方，终于可以亲自走一走。穿过街区，累了得坐下来，病了也得躺一天。我开始慢慢认得眼前这座城。
 
-*巴士订单上的时间*　6 月 15 日 东京站 16:15 → 河口湖站 18:17
+<div className="ticket">
 
-## 富士五湖 · 鸟居、倒影和环湖的小路
+<p className="small-note">巴士订单上的时间</p>
 
-**为了平野之滨的日落**
+6 月 15 日 东京站 16:15 → 河口湖站 18:17
 
-*D4–5 · 6/15–16*
+</div>
+
+</Story>
+
+<Story id="fuji" title="为了平野之滨的日落" layout="route" chapter="富士五湖" meta="富士五湖 ／ 从河口湖到山中湖 D4–5 · 6/15–16">
+
+<Plate src={routeFuji} alt="河口湖至山中湖的接驳示意，以及按实际骑行路网重建的环湖路线" caption="河口湖出发，经过天空鸟居、新仓山浅间公园和下吉田，再到山中湖。" map />
 
 为了在平野之滨拍日落，出发前我改了好几次路线，连大石公园也从单子上划掉了。后来，我把富士山和后面的安排都往前提了一天。
 
@@ -168,115 +278,79 @@ import PhotoSpread from '@/components/PhotoSpread.astro';
 
 后来，我骑车绕了山中湖一圈。
 
-<PhotoSpread caption="河口湖出发，经过天空鸟居、新仓山浅间公园和下吉田，再到山中湖。">
+</Story>
 
-![河口湖至山中湖的接驳示意，以及按实际骑行路网重建的环湖路线](./japan-twelve-days/route-fuji.webp)
+<Story id="morning" title="鸟居上方，山顶还有雪" layout="spread" meta="河口湖 ／ 清晨五点 · 步行记录 6.12 km D5 · 6/16">
 
-</PhotoSpread>
+<div className="triptych">
 
-**鸟居上方，山顶还有雪**
+<Plate src={fujiTorii} alt="红色鸟居框住清晨的富士山，山顶仍有积雪" caption="早上五点起床，没吃早饭，走了六公里山路，终于把鸟居和富士山拍进了同一张照片。" />
 
-*D5 · 6/16*
+<Plate src={fujiReflection} alt="清晨的湖面上倒映着富士山和山脚的房屋" caption="同一个早晨，湖面映出了整座山。" size="small" />
 
-*河口湖 ／ 清晨五点 · 步行记录 6.12 km*
+<Plate src={fujiFlowers} alt="花丛和屋檐后露出的富士山" caption="花丛与屋檐" size="small" />
 
-早上五点起床，没吃早饭，走了六公里山路，终于把鸟居和富士山拍进了同一张照片。
+</div>
 
-<PhotoSpread>
+</Story>
 
-![红色鸟居框住清晨的富士山，山顶仍有积雪](./japan-twelve-days/fuji-torii.webp)
+<Story id="clouds" title="「我是富士山」" layout="spread" meta="新仓山浅间公园 · 下吉田 D5 · 6/16">
 
-</PhotoSpread>
-
-<PhotoSpread pair caption="同一个早晨，湖面映出了整座山。 花丛与屋檐">
-
-![清晨的湖面上倒映着富士山和山脚的房屋](./japan-twelve-days/fuji-reflection.webp)
-
-![花丛和屋檐后露出的富士山](./japan-twelve-days/fuji-flowers.webp)
-
-</PhotoSpread>
-
-**「我是富士山」**
-
-*D5 · 6/16*
+<Plate src={fujiInClouds} alt="五重塔旁云层遮住了山，照片上用红线画出了富士山" caption="五重塔旁，红线画出了云后面的富士山。" />
 
 早上还看得那么清楚，到了新仓山浅间公园，云又把山挡住了。想拍五重塔和富士山同框，最后留下的就是这张写着「我是富士山」的照片。
 
 下山以后，我在下吉田随便转了转，就去了山中湖。
 
-<PhotoSpread caption="五重塔旁，红线画出了云后面的富士山。">
+</Story>
 
-![五重塔旁云层遮住了山，照片上用红线画出了富士山](./japan-twelve-days/fuji-in-clouds.webp)
+<Story id="ride" title="一个人骑了整整一圈" layout="spread" meta="D5 · 6/16">
 
-</PhotoSpread>
-
-**一个人骑了整整一圈**
-
-*D5 · 6/16*
+<Plate src={yamanakako} alt="山中湖畔的骑行小路，一侧是湖水和远处的富士山" />
 
 下午到了山中湖，第一次住汽车旅馆。我租了辆电助力自行车，沿着照片里这条小路绕湖骑了一圈。
 
 路上几乎没有行人，偶尔才有一辆车匆匆驶过。一边是湖，一边是树，抬头还能看见富士山。我从来没有觉得这么自由、这么放松。
 
-<PhotoSpread>
+</Story>
 
-![山中湖畔的骑行小路，一侧是湖水和远处的富士山](./japan-twelve-days/yamanakako.webp)
+<Story id="izu" title="沿东海岸，往下田" layout="route" chapter="伊豆" meta="伊豆高原 · 下田 ／ 区域路线 D6–7 · 6/17–18">
 
-</PhotoSpread>
-
-## 伊豆 · 沿东海岸，往下田
-
-*D6–7 · 6/17–18*
+<Plate src={routeIzu} alt="伊东、伊豆高原、城崎海岸至下田、白滨和爪木崎的位置" map />
 
 早上去便利店吃过早餐，我坐大巴去换电车。记得换车的地方好像叫三岛。去伊豆高原的那段坐的是旅游列车，窗外一路都是海边的小镇。
 
-<PhotoSpread caption="伊豆东岸的几处停留。大室山那天因天气关门。">
+大室山那天因天气关门。
 
-![伊东、伊豆高原、城崎海岸至下田、白滨和爪木崎的位置](./japan-twelve-days/route-izu.webp)
+</Story>
 
-</PhotoSpread>
+<Story id="seaside" title="住在海边的人" layout="spread" meta="伊豆半岛 ／ 海岸 D6 · 6/17">
 
-**住在海边的人**
+<div className="diptych">
 
-*D6 · 6/17*
+<Plate src={izuTown} alt="从高处望向伊豆的海滨小镇" caption="我望着那些房子就想，住在海边的人，每天过着什么样的生活呢？" size="half" />
 
-我望着那些房子就想，住在海边的人，每天过着什么样的生活呢？
+<Plate src={jogasaki} alt="树枝之间的城崎海岸与礁石" caption="城崎海岸很美，可惜天色一般。" size="half" />
 
-城崎海岸很美，可惜天色一般。
+</div>
 
 伊东的酒店有台冰淇淋自动贩卖机，我买了两个。
 
-<PhotoSpread pair>
+</Story>
 
-![从高处望向伊豆的海滨小镇](./japan-twelve-days/izu-town.webp)
+<Story id="shoes" title="海浪把鞋卷走了" layout="spread" meta="06.18 ／ 下田海边 D7 · 6/18">
 
-![树枝之间的城崎海岸与礁石](./japan-twelve-days/jogasaki.webp)
-
-</PhotoSpread>
-
-**海浪把鞋卷走了**
-
-*D7 · 6/18*
-
-*06.18 ／ 下田海边*
+<Plate src={shirahama} alt="白滨神社的海上鸟居与当天的晚霞" caption="下田，白滨神社。海边的鸟居映着晚霞。" />
 
 啊，下田，安逸的小镇。海浪把我的鞋卷走了，我又下海把它捡了回来。鞋湿透了，脚上全是沙。酒店离海滩还有一公里多。
 
 那会儿我连饭都没吃。酒店附近没有便利店，要去四五公里外找吃的，还得坐大约半小时公交。
 
-<PhotoSpread caption="下田，白滨神社。海边的鸟居映着晚霞。">
+</Story>
 
-![白滨神社的海上鸟居与当天的晚霞](./japan-twelve-days/shirahama.webp)
+<Story id="chips" title="一包薯片" layout="quiet" meta="下田的夜路 D7 · 6/18">
 
-</PhotoSpread>
-
-**一包薯片**
-
-*D7 · 6/18*
-
-> “欢迎再来。”
-
-*他在下田另一家酒店工作，临别用中文说的。*
+<blockquote>“欢迎再来。”<cite>他在下田另一家酒店工作，临别用中文说的。</cite></blockquote>
 
 从便利店往回走，离开大路后，回酒店还要往山里走八百米。天已经黑了，手机也没电了。四下没有路灯。我走错了一条路，想起刚才路过的一户人家，车里还有人，就折回去，用手表上的离线翻译向他求助。
 
@@ -284,49 +358,55 @@ import PhotoSpread from '@/components/PhotoSpread.astro';
 
 终于到了。我把刚买的薯片送给他，他收下了。
 
-*800 m 山路，没有路灯。这一页没有照片。手机没电了。*
+<p className="stat">800 m<small>山路，没有路灯</small></p>
 
-**赶上末班车**
+<p className="small-note">这一页没有照片。手机没电了。</p>
 
-*D8 · 6/19*
+</Story>
 
-*06.19 ／ 爪木崎公园*
+<Story id="last-bus" title="赶上末班车" layout="spread" meta="爪木崎公园 D8 · 6/19">
+
+<div className="opening">
+
+<Plate src={tsumekizaki} alt="爪木崎绿坡之间的小径和桥" size="half" />
+
+<div className="walk-note">
+
+<p className="stat">10,065 步<small>下了公交，又走了三公里才到爪木崎。</small></p>
+
+<blockquote>“就这么多。”</blockquote>
+
+</div>
+
+</div>
 
 这天睡到自然醒，在房间里刷了会儿手机，一晃就到了下午三点。按原计划，我该在去镰仓的路上。这时我才刚从下田的酒店出门。
 
 公交约一小时一趟。天气不大好，景色看着也就一般。晚上赶上了末班车，回了酒店。
 
-<PhotoSpread caption="10,065 步。下了公交，又走了三公里才到爪木崎。 “就这么多。”">
+</Story>
 
-![爪木崎绿坡之间的小径和桥](./japan-twelve-days/tsumekizaki.webp)
+<Story id="aquarium" title="在下田的最后一个上午" layout="feature">
 
-</PhotoSpread>
-
-**在下田的最后一个上午**
+<Plate src={shimodaAquarium} alt="一群小鱼游过水族馆里两块礁石之间" />
 
 6 月 20 日，水族馆。镜头里，一群小鱼从两块礁石间游过。看完海豚表演，还要赶下午去镰仓的车。
 
-<PhotoSpread>
+</Story>
 
-![一群小鱼游过水族馆里两块礁石之间](./japan-twelve-days/shimoda-aquarium.webp)
+<Story id="railway" title="站台与道口" layout="spread" meta="铁路摄影 D6–8 · 6/17–19">
 
-</PhotoSpread>
+<div className="diptych">
 
-**站台与道口**
+<Plate src={railCrossing} alt="伊豆的铁轨与道口" caption="铁路道口。" size="half" />
 
-*D6–8 · 6/17–19*
+<Plate src={izuPlatform} alt="伊豆站台边停靠的两列电车" caption="伊豆的站台。" size="half" />
 
-<PhotoSpread pair caption="铁路道口。伊豆的站台。">
+</div>
 
-![伊豆的铁轨与道口](./japan-twelve-days/rail-crossing.webp)
+</Story>
 
-![伊豆站台边停靠的两列电车](./japan-twelve-days/izu-platform.webp)
-
-</PhotoSpread>
-
-**下田站，换一张票**
-
-*D9 · 6/20*
+<Story id="change-ticket" title="下田站，换一张票" layout="quiet" meta="06.20 ／ 下田海中水族馆 → 伊豆急下田站 → 镰仓方向 D9 · 6/20">
 
 从水族馆出来，在公交车上和两位读医的博士生聊了会儿天。临别加了微信，他们说，到了上海可以找他们玩。
 
@@ -334,124 +414,106 @@ import PhotoSpread from '@/components/PhotoSpread.astro';
 
 还有一会儿才发车，他又给我看他拍的日本祭典的照片和视频。我谢谢他帮忙，他也谢谢我来日本旅行。
 
-*特急 踊り子*
+<div className="ticket">
+
+<p className="small-note">特急 踊り子</p>
 
 上了舞女号，座位宽敞。我在往镰仓去的车上，舒舒服服地睡了一觉。
 
-## 镰仓 · 和朋友走到海边
+</div>
 
-**在镰仓，和朋友碰头**
+</Story>
 
-*D9–11 · 6/20–22*
+<Story id="kamakura" title="在镰仓，和朋友碰头" layout="route" chapter="镰仓" meta="镰仓 ／ 湘南海岸 D9–11 · 6/20–22">
+
+<Plate src={routeKamakura} alt="镰仓经真实铁路走廊回到东京，再到秋叶原和涩谷的路线" caption="从镰仓一起回东京，逛过秋叶原，我又独自去了涩谷。" map />
 
 还在下田的时候，东京的朋友联系我，说想见一面。我们约在镰仓碰头。
 
 出发前，我画的是一个人坐江之电的路线。真到了镰仓，这一段是我们一起走的。寿司郎太好吃了，两个人一块儿吃了两次。
 
-<PhotoSpread caption="从镰仓一起回东京，逛过秋叶原，我又独自去了涩谷。">
+</Story>
 
-![镰仓经真实铁路走廊回到东京，再到秋叶原和涩谷的路线](./japan-twelve-days/route-kamakura.webp)
+<Story id="shore" title="浪打到岸边" layout="feature">
 
-</PhotoSpread>
+<Plate src={kamakuraPortrait} alt="朋友拍下的背影，面前是镰仓的海浪" />
 
-**浪打到岸边**
+镰仓海边。背对镜头的是我，按下快门的是从东京来见我的朋友。
 
-<PhotoSpread caption="镰仓海边。背对镜头的是我，按下快门的是从东京来见我的朋友。">
+</Story>
 
-![朋友拍下的背影，面前是镰仓的海浪](./japan-twelve-days/kamakura-portrait.webp)
+<Story id="coast-road" title="通往海边的路" layout="spread" meta="湘南 ／ 海岸公路 D9–11 · 6/20–22">
 
-</PhotoSpread>
+<div className="departure-pair">
 
-**通往海边的路**
+<Plate src={shonanStreet} alt="电线和街边楼房之间，街道尽头露出海面" caption="天、电线、楼房。再往街道尽头看，才发现楼与楼之间露着一小段海。" size="small" />
 
-*D9–11 · 6/20–22*
+<Plate src={shonanGtr} alt="湘南海边公路上的 GT-R，海面上有人在等浪" caption="海岸公路上的 GT-R。越过车顶，水面上还有一排等浪的人。" size="half" />
 
-<PhotoSpread caption="天、电线、楼房。再往街道尽头看，才发现楼与楼之间露着一小段海。">
+</div>
 
-![电线和街边楼房之间，街道尽头露出海面](./japan-twelve-days/shonan-street.webp)
+</Story>
 
-</PhotoSpread>
+<Story id="return" title="街对面写着秋叶原" layout="spread" chapter="重返东京" meta="东京 ／ 秋叶原 D10–11 · 6/21–22">
 
-<PhotoSpread caption="海岸公路上的 GT-R。越过车顶，水面上还有一排等浪的人。">
-
-![湘南海边公路上的 GT-R，海面上有人在等浪](./japan-twelve-days/shonan-gtr.webp)
-
-</PhotoSpread>
-
-## 回到东京 · 唱片店与成田特快
-
-**街对面写着秋叶原**
-
-*D10–11 · 6/21–22*
+<Plate src={akihabara} alt="东京秋叶原街对面的商店招牌" />
 
 从镰仓出来，我们一起回了东京。在秋叶原逛了逛，帮朋友买了台相机带回去。后来朋友走了，我又一个人去了涩谷。
 
-<PhotoSpread>
+</Story>
 
-![东京秋叶原街对面的商店招牌](./japan-twelve-days/akihabara.webp)
+<Story id="records" title="差一点，三万日元" layout="spread" meta="06.23 ／ 涩谷「TOWER RECORDS」 D12 · 6/23">
 
-</PhotoSpread>
-
-**差一点，三万日元**
-
-*D12 · 6/23*
-
-*06.23 ／ 涩谷 TOWER RECORDS*
+<Plate src={towerRecords} alt="涩谷 TOWER RECORDS 的唱片架" />
 
 最后没去下北泽。我一个人在涩谷逛了一下午，又逛了一上午。23 日走进唱片店，在乌鲁木齐很少听人提起的乐队，在这里都能找到专辑。
 
 我提了个篮子，挑了一堆 CD，连 CD 机都想一起买。粗粗一算，快到三万日元了。最后一张也没买。
 
-<PhotoSpread>
+<blockquote>“无论是多小众的爱好，在大城市都能找到归属感”<cite>6 月 23 日日记节录。</cite></blockquote>
 
-![涩谷 TOWER RECORDS 的唱片架](./japan-twelve-days/tower-records.webp)
+</Story>
 
-</PhotoSpread>
+<Story id="departure" title="从涩谷，坐成田特快" layout="route" chapter="归途" meta="06.23 ／ 东京 → 成田机场 D12 · 6/23">
 
-> “无论是多小众的爱好，在大城市都能找到归属感”
+<Plate src={routeNarita} alt="成田特快从涩谷经品川、东京和千叶方向前往成田机场" map />
 
-*6 月 23 日日记节录。*
+<div className="departure-pair">
 
-**从涩谷，坐成田特快**
+<Plate src={naritaExpress} alt="成田特快驶进站台的视频静帧" caption="成田特快进站" size="small" />
 
-*D12 · 6/23*
+<Plate src={tokyoFromAir} alt="离开东京时从飞机上看见的云海与晚霞" caption="离开时" size="half" />
+
+</div>
 
 6 月 23 日下午，从涩谷坐成田特快去机场。我身边的日元现金只剩下 63 日元。
 
 前两天已经有些想回国。真到了离开的时候，日记里写的却是不舍，还有一句：“下次来又是什么时候了呢？”
 
-<PhotoSpread>
+</Story>
 
-![成田特快从涩谷经品川、东京和千叶方向前往成田机场](./japan-twelve-days/route-narita.webp)
+<Story id="keepsakes" title="一只鹤，一张车票" layout="spread" chapter="旅途拾零">
 
-</PhotoSpread>
+<div className="diptych">
 
-<PhotoSpread pair caption="成田特快进站 · 离开时">
+<Plate src={towelCrane} alt="民宿主人用白毛巾在床上叠的鹤" caption="床上的这只鹤，是民宿主人用毛巾叠出来的。我觉得有意思，就拍了下来。" size="half" />
 
-![成田特快驶进站台的视频静帧](./japan-twelve-days/narita-express.webp)
+<Plate src={naritaTicket} alt="手中的车票，涩谷至成田机场的成田特快 33 号" caption="6 月 23 日　涩谷 14:14 发车。 成田特快 33 号。" size="half" />
 
-![离开东京时从飞机上看见的云海与晚霞](./japan-twelve-days/tokyo-from-air.webp)
+</div>
 
-</PhotoSpread>
+</Story>
 
-**一只鹤，一张车票**
+<Story id="epilogue" title="半年后，又翻到这段对话" layout="quiet" chapter="尾声 ／ 十一月">
 
-<PhotoSpread pair caption="床上的这只鹤，是民宿主人用毛巾叠出来的。我觉得有意思，就拍了下来。 6 月 23 日，涩谷 14:14 发车。 成田特快 33 号。">
-
-![民宿主人用白毛巾在床上叠的鹤](./japan-twelve-days/towel-crane.webp)
-
-![手中的车票，涩谷至成田机场的成田特快 33 号](./japan-twelve-days/narita-ticket.webp)
-
-</PhotoSpread>
-
-## 半年后，又翻到这段对话
-
-六月离开东京的时候，我还不知道，下次来会是什么时候。到了十一月，偶然又翻出当时排路线的那段对话。里面的人还在算，D8 能不能赶到由比滨，D9 走到江之岛会不会太紧。
+六月离开东京的时候，我还不知道，下次来会是什么时候。到了十一月，偶然又翻出当时排路线的那段对话。里面的人还在算，D8 能不能赶到由比滨，D9走到江之岛会不会太紧。
 
 现在再看，我知道 6 月 19 日下午三点，自己还在下田。也知道第二天坐去镰仓的那班车之前，有人会给我看他拍的祭典。
 
-> “他给我带来的美好回忆可以持续几十年”
+<blockquote>“他给我带来的美好回忆可以持续几十年”<cite>十一月，谈起六月这次日本旅行。</cite></blockquote>
 
-*十一月，谈起六月这次日本旅行。*
+<p className="small-note">Ryan ／ 2026 年 11 月</p>
 
-Ryan ／ 2026 年 11 月
+</Story>
+
+<footer className="colophon"><strong>日本十二日</strong><p>二〇二六年六月　私人旅行纪念册</p><p>摄影与日记 ／ Ryan</p><p>东京 · 富士五湖 · 伊豆 · 镰仓</p></footer>

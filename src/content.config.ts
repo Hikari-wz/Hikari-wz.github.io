@@ -22,7 +22,7 @@ function files(collection: string) {
 export const collections = {
   journal: defineCollection({
     loader: files('journal'),
-    schema: context => z.object({ ...common(context), category: z.enum(keys(categories)) })
+    schema: context => z.object({ ...common(context), category: z.enum(keys(categories)), format: z.literal('photo-journal').optional() })
   }),
   learn: defineCollection({
     loader: files('learn'),
