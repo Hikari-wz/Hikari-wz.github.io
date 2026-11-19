@@ -1,12 +1,11 @@
 ---
-import { getCollection } from 'astro:content';
 import { categories } from '@/data/site';
-import { newestFirst } from '@/lib/entries';
+import { visibleEntries, newestFirst } from '@/lib/entries';
 import EntryList from './EntryList.astro';
 import PageIntro from './PageIntro.astro';
 interface Props { category?: keyof typeof categories }
 const { category } = Astro.props;
-const entries = (await getCollection('journal', e => !category || e.data.category === category)).sort(newestFirst);
+const entries = (await visibleEntries('journal')).filter(e => !category || e.data.category === category).sort(newestFirst);
 ---
 <PageIntro name="记录空间" en="Journal" description="旅行见闻、摄影和生活里的零散思考。" />
 <nav class="filters" aria-label="记录分类">

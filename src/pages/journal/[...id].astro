@@ -1,10 +1,10 @@
 ---
-import { getCollection } from 'astro:content';
+import { visibleEntries } from '@/lib/entries';
 import Site from '@/layouts/Site.astro';
 import Article from '@/components/Article.astro';
 export async function getStaticPaths() {
-  return (await getCollection('journal')).map(entry => ({params: { id: entry.id }, props: { entry }}));
+  return (await visibleEntries('journal')).map(entry => ({params: { id: entry.id }, props: { entry }}));
 }
 const { entry } = Astro.props;
 ---
-<Site title={entry.data.title} description={entry.data.description}><Article entry={entry}/></Site>
+<Site entry={entry}><Article entry={entry}/></Site>

@@ -1,0 +1,6 @@
+---
+interface Props { data: { demo: boolean; draft: boolean } }
+const { data } = Astro.props;
+---
+{data.demo && <small class="demo">Demo</small>}
+{data.draft && <small class="demo">草稿</small>}

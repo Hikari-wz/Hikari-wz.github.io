@@ -1,14 +1,13 @@
 ---
-import { getCollection } from 'astro:content';
 import { Image } from 'astro:assets';
 import Site from '@/layouts/Site.astro';
 import EntryList from '@/components/EntryList.astro';
 import Icon from '@/components/Icon.astro';
 import print from '@/assets/umezawa.webp';
 import { site, spaces } from '@/data/site';
-import { newestFirst } from '@/lib/entries';
+import { visibleEntries, newestFirst } from '@/lib/entries';
 import '@/styles/home.css';
-const latest = (await Promise.all([getCollection('journal'), getCollection('learn'), getCollection('lab')])).flat().sort(newestFirst).slice(0, 4);
+const latest = (await Promise.all([visibleEntries('journal'), visibleEntries('learn'), visibleEntries('lab')])).flat().filter(entry => !entry.data.demo && !entry.data.draft).sort(newestFirst).slice(0, 4);
 ---
 <Site>
   <section class="home-intro" aria-labelledby="greeting">
@@ -33,6 +32,6 @@ const latest = (await Promise.all([getCollection('journal'), getCollection('lear
   </section>
   <section class="home-section updates" aria-labelledby="updates-heading">
     <div class="section-heading"><h2 id="updates-heading">最近更新</h2><span lang="en">Latest entries</span></div>
-    <EntryList entries={latest}/>
+    <EntryList entries={latest} empty="第一篇正式内容发布后，会出现在这里。" />
   </section>
 </Site>

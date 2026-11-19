@@ -1,6 +1,10 @@
-import type { CollectionEntry } from 'astro:content';
+import { getCollection, type CollectionEntry } from 'astro:content';
 
 export type Entry = CollectionEntry<'journal' | 'learn' | 'lab'>;
+export function visibleEntries<C extends Entry['collection']>(collection: C) {
+  return getCollection(collection, entry => import.meta.env.DEV || !entry.data.draft);
+}
+
 export function href(entry: Entry) {
   return '/' + entry.collection + '/' + entry.id + '/';
 }

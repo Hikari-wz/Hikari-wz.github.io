@@ -15,7 +15,8 @@ export default defineConfig({
   site: 'https://hikari-wz.github.io',
   output: 'static',
   trailingSlash: 'always',
-  integrations: [mdx(math), sitemap()],
+  prerenderConflictBehavior: 'error',
+  integrations: [mdx(), sitemap()],
   vite: { plugins: [tailwind()] },
   devToolbar: { enabled: false },
   markdown: {

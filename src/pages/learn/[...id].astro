@@ -1,12 +1,12 @@
 ---
-import { getCollection } from 'astro:content';
+import { visibleEntries } from '@/lib/entries';
 import Article from '@/components/Article.astro';
 import LearnNav from '@/components/LearnNav.astro';
 import Site from '@/layouts/Site.astro';
 import '@/styles/sections.css';
 export async function getStaticPaths() {
-  return (await getCollection('learn')).map(entry => ({params: {id: entry.id}, props:{entry}}));
+  return (await visibleEntries('learn')).map(entry => ({params: {id: entry.id}, props:{entry}}));
 }
 const {entry} = Astro.props;
 ---
-<Site title={entry.data.title} description={entry.data.description}><div class="learn-layout note-page"><LearnNav /><Article entry={entry} /></div></Site>
+<Site entry={entry}><div class="learn-layout note-page"><LearnNav /><Article entry={entry} /></div></Site>

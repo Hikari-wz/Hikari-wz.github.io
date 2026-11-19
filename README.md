@@ -1,6 +1,6 @@
 # Hikari’s Space
 
-Hikari 的个人数字空间，站点地址为 <https://hikari-wz.github.io/>。Astro 在构建时生成独立 HTML，浏览器只为主题选择和移动导航加载少量脚本。日常写作使用 Markdown，项目页可以在 MDX 中嵌入独立组件。
+Hikari 的个人数字空间，站点地址为 <https://hikari-wz.github.io/>。Astro 在构建时生成独立 HTML，浏览器按页面加载主题与导航等少量脚本。日常写作使用 Markdown，项目页可以在 MDX 中嵌入独立组件。
 
 ## 在自己的电脑上运行
 
@@ -11,16 +11,19 @@ npm ci
 npm run dev
 ```
 
-终端会显示本地网址。修改文件并保存即可看到变化。提交前执行以下检查，最后一行需要 Python 3.9 或更高版本。
+终端会显示本地网址。修改文件并保存即可看到变化。提交前执行以下检查。静态和内容测试需要 Python 3.9+，浏览器测试复用本机安装的 Chrome。
 
 ```sh
 npm run check
 npm run build
 python3 scripts/verify.py
+npm run test:content
+npm run test:browser
+npm audit
 npm run preview
 ```
 
-`dev` 用于写作和开发，`preview` 查看上一次构建生成的 `dist/`。提交源码与 `package-lock.json` 即可。CI 会从锁文件安装依赖。Astro 6 与 Tailwind 的 Vite 插件共用 Vite 7，升级开发依赖时一起验证这三者。
+`dev` 用于写作和开发，`preview` 查看上一次构建生成的 `dist/`。提交源码与 `package-lock.json` 即可。CI 会从锁文件安装依赖。项目使用 Astro 7、Vite 8 和现有的 remark/rehype 数学插件。锁文件固定了修复后的依赖；KaTeX 的 npm override 等上游数学插件跟进后可以移除。CI 对完整依赖树执行审计，高危及以上会中止部署。
 
 ## 找代码
 
@@ -37,44 +40,84 @@ npm run preview
 | `src/assets/`、`public/` | 参与优化的图片，以及原样发布的图标、robots.txt |
 | `.github/workflows/pages.yml`、`scripts/verify.py` | CI、部署、构建产物链接校验 |
 
-## 发布一篇记录
+## 写作与发布
 
-在 `src/content/journal/` 创建 `first-walk.md`，如下所示。文件名会成为永久链接 `/journal/first-walk/`。子目录也会成为路径的一部分，发布后尽量保留文件名。分类页使用 `/journal/category/` 前缀，文章文件避开这一目录名。
+新增 Markdown 或 MDX 文件即可生成独立页面。文件路径决定文章地址，例如 `src/content/journal/first-walk.md` 对应 `/journal/first-walk/`。同一栏目使用唯一文件名；已发布的路径尽量保持稳定。`/journal/category/` 留给分类页。页面地址发生冲突时构建会报错，请给新文件换一个名称。
+
+| 内容状态 | 如何设置 | 本地开发 | 生产栏目和详情页 | 首页最近更新 |
+| --- | --- | --- | --- | --- |
+| 正式内容 | 省略两个开关 | 可见 | 可见，进入站点地图 | 按更新时间取最近四条 |
+| 公开示例 | `demo: true` | 显示 Demo | 显示 Demo，地址可分享 | 隐藏 |
+| 草稿 | `draft: true` | 显示草稿，可从栏目进入 | 排除，站点地图也排除 | 隐藏 |
+
+两个开关同时开启时按草稿处理。没有正式条目时首页显示空状态。用 `npm run dev` 预览草稿；发布时删除 `draft: true` 或改为 `false`，构建后再用 `npm run preview` 查看公开版本。
+
+**公开仓库里的草稿源码人人可读。** 私人草稿或私人照片请保留在仓库外，或仅保存在本机未跟踪的文件中。放在 `public/` 的资源会原样发布，不能用草稿字段保护。提交前检查 `git diff --staged`，避免把私人资料、密钥或包含定位信息的照片带入历史。
+
+三个可复制的最小示例如下。实际写作时替换标题、日期与正文。
+
+### 旅行游记 · `src/content/journal/first-walk.md`
 
 ```md
 ---
-title: 文章标题
-description: 一句话介绍这篇文章。
+title: 一段步行路线
+description: 这段路线的起点、终点和途中观察。
 date: 2026-11-19
 category: travel
-tags: [散步, 摄影]
-demo: true
+tags: [步行, 旅行]
 ---
 
-## 一个瞬间
+## 途中
 
-在这里写正文。
+在这里写下想记住的一个细节。
 ```
 
-`category` 可选 `travel`、`photography`、`life`。正式内容省略 `demo` 字段。需要调整显示的更新时间时，添加 `updated: YYYY-MM-DD`。文章、分类页及最近更新都在构建时生成，首页只输出最新四条的标题与链接。公开仓库中的草稿也可被别人读取，私人草稿请放到自己的电脑上。
-
-## 添加学习笔记
-
-复制 `src/content/learn/math/derivative.md`，或参考旧站迁入的 `src/content/learn/cpp/stl/vector.md`。学习笔记使用相同的标题、简介、日期和标签字段，并提供以下字段。
+记录分类可选 `travel`、`photography`、`life`。三个集合都支持可选的 `updated: YYYY-MM-DD` 和 `cover`。封面可用自己的或获得授权的本地 JPG、PNG、WebP。把文件放在文章旁边，在上面的两个 `---` 之间追加以下字段，路径相对于该文章。替代文字请描述照片本身。
 
 ```yaml
+cover:
+  src: ./my-photo.jpg
+  alt: 河岸步道旁的一排树
+```
+
+有封面时，详情页显示响应式图片，分享时另生成 1200 × 630 的 JPEG。省略封面时复用首页的公版版画作分享图。分享卡只在目标地址可由平台抓取后才会显示；各平台自行缓存。
+
+### C++ 笔记 · `src/content/learn/cpp/stl/pair.md`
+
+```md
+---
+title: pair 的两个成员
+description: 记录 first 与 second 的访问方式。
+date: 2026-11-19
 topic: cpp
 section: STL
 order: 2
+tags: [C++, STL]
+---
+
+## 成员访问
+
+用 `p.first` 和 `p.second` 分别访问两个成员。
 ```
 
-`topic` 可选 `cpp`、`math`、`languages`、`computing`。侧栏按学科和章节汇总，同章节按 `order` 排序。二、三级 Markdown 标题自动进入本页目录。使用带语言名称的代码围栏高亮代码，`$…$` 和 `$$…$$` 表示行内和块级公式。数学内容在构建时生成 MathML。将来需要搜索时，可在构建后索引 `dist/`，再给 `LearnNav.astro` 的 `search` 插槽接入搜索控件，按需加载索引。
+`topic` 可选 `cpp`、`math`、`languages`、`computing`。侧栏按学科和章节汇总，同章节按 `order` 排序。二、三级标题自动进入本页目录。代码围栏写语言名即可高亮。`$…$` 和 `$$…$$` 分别表示行内和块级公式，构建时生成 MathML。搜索入口已预留在 `LearnNav.astro` 的 `search` 插槽。
 
-## 添加项目
+### 项目介绍 · `src/content/lab/my-tool.md`
 
-- **外部项目**　在 `src/content/lab/` 复制 `stl-practice.md`，更改内容和 HTTPS `projectUrl`，详情页会生成“打开项目”入口。
-- **站内项目**　参考 `palette.mdx`，在 `src/features/项目名/` 放置组件，在 MDX 正文中导入并使用它。新增内容文件就会生成独立地址和目录入口。
-- **交互工具**　把工具的脚本写在其 Astro 组件的 `<script>` 内。若确实需要 React，再安装相应集成，仅在工具页按需激活组件。首页始终只读取项目元数据。
+```md
+---
+title: 我的第一个小工具
+description: 说明它帮助使用者解决什么问题。
+date: 2026-11-19
+tags: [工具]
+---
+
+## 使用方法
+
+在这里写输入、操作和结果。
+```
+
+有外部地址时添加 HTTPS `projectUrl` 即可显示“打开项目”。站内工具可参考 `palette.mdx`：将组件放到 `src/features/项目名/`，从 MDX 导入即可。项目使用实验空间分类，标签可按需要填写。
 
 ## 导航、图片与外观
 
@@ -92,6 +135,23 @@ order: 2
 4. 本仓库是用户主页，根路径为 `/`，`astro.config.mjs` 的 `site` 是正式域名。子路由生成各自的 `index.html`，`404.html` 提供自定义错误页面。将来若迁往子目录，需要同步调整站点配置和根路径链接。
 
 部署无需填写个人访问令牌。只有部署作业申请 Pages 写权限和 OIDC 权限。原站的三个文件可从提交 `b6e1c46` 读取，原 vector 笔记和 STL 链接已迁入新站。
+
+### 失败排查
+
+打开 Actions 中对应提交的运行，先看第一个失败步骤。类型错误通常会指出内容文件和字段；图片错误先核对文件名、大小写、相对路径和格式。站点地图或站内锚点错误会打印来源页和目标地址。依赖审计失败先读公告，再更新兼容版本和锁文件，重跑公式、MDX 和图片测试。PR 中部署显示 `skipped` 是预期行为。
+
+构建成功但 `deploy` 失败时，核对运行的分支、Pages 来源、`github-pages` 环境规则与部署作业权限。推送新修复后查看新提交的运行；临时网络失败可重跑原作业。首次成功发布后，从正式域名直接打开首页、笔记、项目和不存在的路径，再试一次手机分享。真实平台的缓存和渲染需要在这一步核对。
+
+### 回滚
+
+- **后续普通更新**：从最新 `main` 开恢复分支，对有问题的提交执行 `git revert <提交号>`，通过 PR 运行检查再合并。若要撤回一个真正的合并提交，先核对其父提交，再使用 `git revert -m 1 <合并提交号>`。这会新增一条恢复记录。
+- **首次切换后急需旧主页**：历史提交 `b6e1c46` 含完整旧版 `index.html`、`style.css`、README。可从它建专用恢复分支（例如 `git branch legacy-pages b6e1c46`、`git push origin legacy-pages`）。由所有者在 Pages 来源选择 **Deploy from a branch → legacy-pages → / (root)**，等对应部署成功并打开正式域名核对。恢复 Astro 版时再选择 **GitHub Actions**，从已修复的 `main` 手动运行工作流。整个过程保留 `main` 的历史。
+
+### 验收范围
+
+`scripts/verify.py` 遍历生成的 HTML、站内资源、锚点和站点地图，同时校验分享图、规范地址、语言、替代文字、主标题和主内容区。`test:content` 在临时目录分别构建仅含草稿和示例的站点、加入三类正式内容的站点，并测试自定义封面及路由冲突。两个测试站均独立于生产产物。
+
+`test:browser` 使用本地生产预览，在 375、390、430、768、1280 像素下检查页面宽度和图片。它还检查键盘跳转、菜单开合、跨页主题、系统配色、长代码和块级数学公式，以及 HTTP 404。Linux 可通过 `CHROME_BIN=/usr/bin/chromium npm run test:browser` 指定可执行文件。上线前可再用 iPhone Safari 或 VoiceOver 实查导航朗读、公式与标签含义。
 
 ## 工作台的隐私边界
 
