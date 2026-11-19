@@ -1,0 +1,21 @@
+---
+import { Image } from 'astro:assets';
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  caption?: string;
+  size?: 'wide' | 'half' | 'small';
+  priority?: boolean;
+  map?: boolean;
+}
+const {src, alt, caption, size = 'wide', priority = false, map = false} = Astro.props;
+const maximum = { wide: 1152, half: 680, small: 400 }[size];
+const widths = [...new Set([400, 640, 960, 1440, src.width].filter(w => w <= src.width))];
+---
+<figure class:list={['plate', { 'route-plate': map }]}>
+  <a href={src.src} aria-label={`查看大图 · ${alt}`}>
+    <Image src={src} alt={alt} widths={widths} sizes={`(max-width: 680px) 100vw, (max-width: 1200px) ${size === 'wide' ? '92' : size === 'half' ? '56' : '34'}vw, ${maximum}px`}
+      loading={priority ? 'eager' : 'lazy'} fetchpriority={priority ? 'high' : undefined} quality={map ? 96 : 86} />
+  </a>
+  {(caption || map) && <figcaption>{caption}{map && <a class="map-link" href={src.src}>放大地图 ↗</a>}</figcaption>}
+</figure>

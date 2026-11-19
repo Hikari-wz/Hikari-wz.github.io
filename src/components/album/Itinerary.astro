@@ -1,0 +1,10 @@
+---
+interface Props { days: [string, string, string][] }
+const { days } = Astro.props;
+---
+<div class="itinerary">
+  <div class="plan-head" aria-hidden="true"><span>日期</span><span>原计划</span><span>实际行程</span></div>
+  <ol>{days.map(([date, plan, actual]) => <li>
+    <h4>{date}</h4><dl><div><dt>原计划</dt><dd>{plan}</dd></div><div><dt>实际行程</dt><dd>{actual}</dd></div></dl>
+  </li>)}</ol>
+</div>

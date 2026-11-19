@@ -1,0 +1,7 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import '@/styles/album.css';
+interface Props { entry: CollectionEntry<'journal'> }
+const { Content } = await render(Astro.props.entry);
+---
+<article class="album"><Content /></article>

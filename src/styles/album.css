@@ -1,0 +1,104 @@
+.album {
+  --green: light-dark(#284c42, #c1d5c8);
+  --wash: light-dark(#efefe6, #252f2a);
+  color: var(--ink);
+  font: 1.08rem/1.95 var(--serif);
+}
+.album-cover {
+  display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); align-items: center;
+  gap: 5%; padding: clamp(2rem,5vw,5rem) 4%; background: var(--wash);
+  margin-block: 2rem 0;
+}
+.album .cover-type { padding-inline: 3%; }
+.cover-type h1 { font: 600 clamp(2.65rem,5.55vw,5rem)/1.18 var(--serif); letter-spacing: .04em; color: var(--green); margin-block: 1.4rem 2.4rem; }
+.cover-type .imprint, .album .story-meta, .album .small-note, .album figcaption, .cover-date, .pdf-link, .album-index, .colophon { font-family: var(--sans); }
+.cover-type .imprint, .cover-date { font-size: .82rem; letter-spacing: .12em; }
+.cover-type .imprint::before { content: ''; display: inline-block; background: var(--accent); width: 2.3rem; height: 2px; vertical-align: middle; margin-right: .8rem; }
+.pdf-link, .map-link, .album .small-note a { border-bottom: 1px solid var(--rule); font-size: .83rem; }
+.pdf-link { display: inline-block; margin-top: 2.5rem; padding-block: .4rem; }
+.album-cover .plate { max-width: min(100%, 49vh); justify-self: center; }
+.album-index { display: flex; flex-wrap: wrap; gap: .2rem 1.5rem; padding-block: 1rem; border-bottom: 1px solid var(--rule); font-size: .86rem; }
+.album-index a { padding-block: .4rem; }
+.album a:hover { color: var(--accent); }
+.album .story { margin: clamp(5rem,9vw,9rem) auto; max-width: 62rem; scroll-margin-top: 2rem; }
+.album .story-heading { margin-bottom: 1.8rem; }
+.album .chapter-name { font: 600 clamp(2.25rem,5vw,4.25rem)/1.25 var(--serif); color: var(--green); border-top: 1px solid var(--green); padding-top: 1.4rem; margin-bottom: 2.5rem; }
+.album .story-meta, .album .small-note, .album figcaption, .album cite { color: var(--secondary); font-size: .85rem; line-height: 1.65; }
+.album .story-meta { margin-bottom: .5rem; letter-spacing: .045em; }
+.album h3 { font: 600 clamp(1.65rem,3.4vw,2.8rem)/1.35 var(--serif); color: var(--green); }
+.album .story-body > * + * { margin-top: 1.3rem; }
+.album .story-body > p, .album .story-body > blockquote, .album .ticket { max-width: 38em; margin-inline: auto; }
+.album .plate { min-width: 0; margin-block: 0; }
+.album .plate > a { display: block; cursor: zoom-in; }
+.album .plate img { display: block; width: 100%; height: auto; }
+.album figcaption { padding-top: .65rem; }
+.album .map-link { margin-left: .6em; white-space: nowrap; }
+.album .opening, .album .diptych, .album .departure-pair { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(1rem,3vw,3rem); }
+.album .diptych { align-items: start; max-width: 56rem; margin-inline: auto; }
+.album .diptych .plate:nth-child(2) { margin-top: clamp(1.8rem,5vw,4.5rem); }
+.album .uneven { grid-template-columns: 1.3fr .8fr; align-items: center; }
+.album .departure-pair { grid-template-columns: 1fr 2fr; align-items: end; }
+.album .triptych { display: grid; grid-template-columns: 2.5fr 1fr; gap: 1rem 1.75rem; align-items: center; }
+.album .triptych > :first-child { grid-row: span 2; }
+.album .opening { margin-bottom: 2rem; }
+.album blockquote { font-size: clamp(1.3rem,2.6vw,2rem); line-height: 1.65; color: var(--green); border-left: 2px solid var(--accent); padding: .25em 0 .25em 1em; }
+.album cite, .album .stat small { display: block; font: normal .84rem/1.7 var(--sans); color: var(--secondary); margin-top: .7rem; }
+.album .stat { font: 400 clamp(2.5rem,6vw,5rem)/1.1 Georgia, var(--serif); color: var(--green); }
+.album .quiet { max-width: 42rem; padding-block: clamp(2rem,5vw,5rem); border-block: 1px solid var(--rule); }
+.album .quiet .stat { margin: 3rem 0 1.5rem; }
+.album .ticket { background: var(--wash); border-left: 3px solid var(--green); padding: 1.2rem 1.5rem; }
+.album .ticket p + p { margin-top: .5rem; }
+.album .feature, .album .portrait { display: grid; grid-template-columns: 1.6fr 1fr; align-content: center; column-gap: 5%; }
+.album .feature .story-body, .album .portrait .story-body { display: contents; }
+.album .feature .plate, .album .portrait .plate { grid-column: 1; grid-row: 1 / 3; }
+.album .feature .story-heading, .album .portrait .story-heading { grid-column: 2; grid-row: 1; align-self: end; margin-bottom: 0; }
+.album .feature p, .album .portrait .story-body > p { grid-column: 2; grid-row: 2; align-self: start; }
+.album .feature { max-width: none; background: light-dark(#e7ece6,#222e29); padding: clamp(1.25rem,4vw,4rem); }
+.album .portrait { max-width: 48rem; grid-template-columns: 1fr 1fr; }
+.album .route-plate { border-top: 1px solid var(--rule); }
+.album .itinerary { font: .98rem/1.7 var(--sans); }
+.itinerary .plan-head, .itinerary li { display: grid; grid-template-columns: 7rem 1fr 1fr; gap: 2rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+.itinerary .plan-head, .itinerary h4 { color: var(--green); font-weight: 650; }
+.itinerary dl, .itinerary dl > div { display: contents; }
+.itinerary dt { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+.album .colophon { max-width: 42rem; margin: 0 auto; color: var(--secondary); font-size: .78rem; letter-spacing: .09em; line-height: 2; }
+.album .colophon strong { font: 600 1.35rem/2 var(--serif); }
+@media(max-width:680px) {
+  .album { font-size: 1.02rem; line-height: 1.9; }
+  .album-cover { margin-top: 1rem; padding: 1.5rem; gap: 1.5rem; grid-template-columns: 1fr; }
+  .album .cover-type { padding: 0; }
+  .cover-type h1 { margin: .65rem 0; font-size: clamp(2.7rem,11vw,4rem); }
+  .pdf-link { margin-top: .55rem; }
+  .album-cover .plate { max-width: 100%; width: min(100%,34vh); justify-self: end; }
+  .album-index { gap: 0 1.05rem; }
+  .album .opening, .album .feature, .album .portrait, .album .diptych, .album .departure-pair, .album .triptych { display: block; }
+  .album .feature { margin-inline: calc(-1 * var(--gap)); padding: 1.6rem var(--gap) 2rem; }
+  .album .feature .story-heading, .album .portrait .story-heading { margin-bottom: 1rem; }
+  .album .feature .plate { margin-inline: calc(-1 * var(--gap)); }
+  .album .opening > * + *, .album .diptych .plate:nth-child(2), .album .departure-pair .plate + .plate, .album .triptych .plate + .plate { margin-top: 1.6rem; }
+  .album .triptych .plate:not(:first-child), .album .uneven .plate:last-child { width: 76%; margin-left: auto; }
+  .album .departure-pair .plate:first-child { width: 66%; }
+  .album .stat { margin-block: 1.5rem; }
+  .album .quiet { padding-inline: .3rem; }
+  .itinerary .plan-head { display: none; }
+  .itinerary li { display: block; padding: 1rem 0; }
+  .itinerary h4 { margin-bottom: .6rem; }
+  .itinerary dl > div { display: grid; grid-template-columns: 4rem 1fr; gap: .6rem; margin-top: .45rem; }
+  .itinerary dt { position: static; clip-path: none; width: auto; height: auto; font-size: .83rem; color: var(--secondary); }
+}
+.album .cover-type::before {
+  content: ''; display: block; width: clamp(3.5rem,6vw,5rem); aspect-ratio: 1;
+  margin-bottom: 1.8rem; border-radius: 50%;
+  background: url('../assets/japan-album/seal.webp') center/cover;
+}
+.album .colophon { position: relative; min-height: 8rem; padding-right: 38%; box-sizing: content-box; max-width: 12rem; }
+.album .colophon::after {
+  content: ''; position: absolute; inset: 0 0 0 auto; width: 55%;
+  background: url('../assets/japan-album/waves.webp') right bottom/contain no-repeat;
+}
+@media(max-width:680px) {
+  .album .cover-type { position: relative; }
+  .album .cover-type::before { position: absolute; top: -.3rem; right: 0; width: 2.3rem; margin: 0; }
+  .album .colophon { padding-right: 0; max-width: none; }
+  .album .colophon::after { position: static; display: block; margin: 1.5rem 0 0 auto; width: 60%; aspect-ratio: 380/247; }
+}

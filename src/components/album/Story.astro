@@ -1,0 +1,18 @@
+---
+interface Props {
+  title: string;
+  meta?: string;
+  layout?: 'spread' | 'portrait' | 'quiet' | 'feature' | 'route' | 'folio';
+  chapter?: string;
+  id: string;
+}
+const { title, meta, layout = 'spread', chapter, id } = Astro.props;
+---
+<section class={`story ${layout}`} id={id} aria-labelledby={id + '-title'}>
+  <header class="story-heading">
+    {chapter && <h2 class="chapter-name">{chapter}</h2>}
+    {meta && <p class="story-meta">{meta}</p>}
+    <h3 id={id + '-title'}>{title}</h3>
+  </header>
+  <div class="story-body"><slot /></div>
+</section>
