@@ -24,9 +24,8 @@ a { color: inherit; text-decoration: none; }
 .brand { gap: .65rem; font-family: "Baskervville", Georgia, "Liberation Serif", "Times New Roman", serif; font-weight: 600; letter-spacing: -.045em; font-size: clamp(1.35rem, 2.2vw, 1.7rem); white-space: nowrap; margin-right: auto; }
 .brand img { width: 31px; height: 31px; }
 .desktop-nav { align-self: stretch; gap: clamp(.4rem, 1.35vw, 1.5rem); }
-.desktop-nav a { display: grid; position: relative; place-items: center; min-width: 44px; font-size: .87rem; color: var(--secondary); }
-.desktop-nav a[aria-current] { color: var(--ink); font-weight: 650; }
-.desktop-nav a[aria-current]::after { position: absolute; content: ""; bottom: 15px; width: 15px; height: 2px; background: var(--accent); border-radius: 3px; }
+.desktop-nav a { display: grid; place-items: center; min-width: 44px; font-size: .87rem; color: var(--secondary); }
+.desktop-nav a[aria-current], .mobile-menu a[aria-current] { font-weight: 700; }
 .desktop-nav a:hover, .footer a:hover, .quiet-link:hover, .back-link:hover { color: var(--accent); }
 .header-tools { gap: .25rem; }
 .theme-control { position: relative; border-left: 1px solid var(--rule); padding-left: .85rem; }
@@ -41,7 +40,6 @@ a { color: inherit; text-decoration: none; }
 .mobile-menu summary::-webkit-details-marker { display: none; }
 .mobile-menu nav { z-index: 4; position: absolute; inset: calc(100% - 1px) 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); padding: .65rem; border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 9px 22px #0002; background: var(--paper); }
 .mobile-menu a { padding: .65rem .9rem; min-height: 44px; }
-.mobile-menu a[aria-current] { color: var(--accent); font-weight: 650; }
 .footer { border-top: 1px solid var(--rule); margin-top: clamp(3rem, 7vw, 6rem); }
 .footer-inner { min-height: 76px; justify-content: space-between; font-size: .8rem; color: var(--muted); }
 .footer a { gap: .35rem; min-height: 44px; }
