@@ -37,8 +37,14 @@ try {
           }
         }
       }
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
-        'Horizontal overflow at ' + width + 'px on ' + route);
+      const overflow = await page.evaluate(() => {
+        const root = document.documentElement;
+        if (root.scrollWidth <= root.clientWidth) return null;
+        const wide = [...document.body.querySelectorAll('*')].filter(el =>
+          el.getBoundingClientRect().right > root.clientWidth);
+        return wide.slice(0, 6).map(el => el.localName + '.' + el.className).join(', ');
+      });
+      assert.equal(overflow, null, 'Horizontal overflow at ' + width + 'px on ' + route + ': ' + overflow);
       assert.ok(await page.locator('img').evaluateAll(images => images.every(img =>
         img.getBoundingClientRect().width <= document.documentElement.clientWidth)), 'Image too wide on ' + route);
     }

@@ -1,4 +1,4 @@
-.article-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem); align-items: start; gap: clamp(1.5rem,4vw,4.5rem); padding-top: clamp(2rem,4vw,3.7rem); max-width: 62rem; margin-inline: auto; }
+.article-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem); align-items: start; gap: clamp(1.5rem,4vw,4.5rem); padding-top: clamp(2rem,4vw,3.7rem); width: 100%; min-width: 0; max-width: 62rem; margin-inline: auto; }
 .article-main { min-width: 0; }
 .article-header { padding-block: 1.2rem 1.6rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--rule); }
 .article-header h1 { font-size: clamp(2rem,3.8vw,3.1rem); margin: .65rem 0; overflow-wrap: anywhere; }
