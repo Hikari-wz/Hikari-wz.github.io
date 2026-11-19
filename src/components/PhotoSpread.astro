@@ -1,0 +1,18 @@
+---
+interface Props { caption?: string; pair?: boolean }
+const { caption, pair = false } = Astro.props;
+---
+<figure class="spread">
+  <div class:list={['frames', { pair }]}><slot /></div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .frames { display: grid; align-items: center; justify-items: center; gap: .65rem; }
+  .frames :global(p) { display: contents; }
+  .frames :global(img) { display: block; width: auto; max-width: 100%; max-height: 42rem; height: auto; }
+  figcaption { margin-top: .45rem; color: var(--secondary); font-size: .875rem; }
+  @media (min-width: 36rem) {
+    .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
