@@ -10,8 +10,8 @@ const modules = [
   {name:'学习进度', icon:'chart', detail:'回顾每周完成的学习目标。'}
 ] as const;
 ---
-<Site title="个人工作台" description="个人工作台的公开布局样例。">
-  <PageIntro name="个人工作台" en="Desk" description="这是公开的工作台样例。私人任务、计划和统计将来由独立的受保护服务管理。" />
-  <div class="section-heading"><h2>工作台模块</h2><small class="demo">Demo</small></div>
+<Site title="个人工作台" description="个人工作台的规划与进展。">
+  <PageIntro name="个人工作台" en="Desk" description="这里公开展示工作台的规划。未来的个人记录将在登录并验证身份后，仅向本人开放。" />
+  <div class="section-heading"><h2>计划中的功能</h2></div>
   <div class="desk-grid">{modules.map(m => <section><Icon name={m.icon} size={23}/><h3>{m.name}</h3><p>{m.detail}</p></section>)}</div>
 </Site>

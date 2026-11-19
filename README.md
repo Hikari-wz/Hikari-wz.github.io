@@ -35,7 +35,7 @@ npm run preview
 | `src/data/site.ts` | 站名、介绍、导航、首页入口、分类和学科 |
 | `src/content/{journal,learn,lab}/` | 可发布的 Markdown / MDX |
 | `src/content.config.ts`、`src/lib/entries.ts` | 校验内容字段，生成链接、排序更新时间 |
-| `src/features/` | 独立项目的界面和逻辑，例如 `palette/Palette.astro` |
+| `src/features/` | 独立项目的界面和逻辑（按需创建） |
 | `src/styles/` | `tokens.css` 控制配色、字体和间距，其余样式按页面职责拆分 |
 | `src/assets/`、`public/` | 参与优化的图片，以及原样发布的图标、robots.txt |
 | `.github/workflows/pages.yml`、`scripts/verify.py` | CI、部署、构建产物链接校验 |
@@ -117,7 +117,7 @@ tags: [工具]
 在这里写输入、操作和结果。
 ```
 
-有外部地址时添加 HTTPS `projectUrl` 即可显示“打开项目”。站内工具可参考 `palette.mdx`：将组件放到 `src/features/项目名/`，从 MDX 导入即可。项目使用实验空间分类，标签可按需要填写。
+有外部地址时添加 HTTPS `projectUrl` 即可显示“打开项目”。站内工具可以将组件放到 `src/features/项目名/`，从 MDX 导入即可。项目使用实验空间分类，标签可按需要填写。
 
 ## 导航、图片与外观
 
