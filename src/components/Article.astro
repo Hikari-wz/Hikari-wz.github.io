@@ -1,0 +1,33 @@
+---
+import EntryStatus from '@/components/EntryStatus.astro';
+import { Image } from 'astro:assets';
+import { render } from 'astro:content';
+import { collectionLabels, isoDay, modified, type Entry } from '@/lib/entries';
+import { categories } from '@/data/site';
+import Icon from './Icon.astro';
+import '@/styles/article.css';
+interface Props { entry: Entry }
+const { entry } = Astro.props;
+const { Content, headings } = await render(entry);
+const toc = headings.filter(h => h.depth === 2 || h.depth === 3);
+const { data } = entry;
+const isJournal = entry.collection === 'journal';
+const back = isJournal ? '/journal/category/' + entry.data.category + '/' : '/' + entry.collection + '/';
+const label = isJournal ? categories[entry.data.category] + '记录' : collectionLabels[entry.collection] + '空间';
+---
+<div class="article-shell">
+  <div class="article-main">
+    <a class="back-link" href={back}><Icon name="back" size={16} />{label}</a>
+    <article>
+      <header class="article-header">
+        <div class="meta"><time datetime={isoDay(modified(entry))}>{isoDay(modified(entry)).replaceAll('-', '.')}</time><EntryStatus data={data} /></div>
+        <h1>{data.title}</h1><p>{data.description}</p>
+        {data.tags.length > 0 && <ul class="tags" aria-label="标签">{data.tags.map(tag => <li>#{tag}</li>)}</ul>}
+      </header>
+      {data.cover && <Image src={data.cover.src} alt={data.cover.alt} widths={[400, 800, 1200]} sizes="(max-width: 740px) 92vw, 680px" class="article-cover" />}
+      <div class="prose"><Content /></div>
+      {entry.collection === 'lab' && entry.data.projectUrl && <a class="button mt-8" href={entry.data.projectUrl}>打开项目 <Icon name="diagonal" size={15} /></a>}
+    </article>
+  </div>
+  {toc.length > 0 && <nav class="toc" aria-label="文章目录"><h2>本页目录</h2><ul>{toc.map(h => <li class:list={{nested: h.depth === 3}}><a href={'#' + h.slug}>{h.text}</a></li>)}</ul></nav>}
+</div>

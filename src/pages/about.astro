@@ -1,0 +1,15 @@
+---
+import Site from '@/layouts/Site.astro';
+import Icon from '@/components/Icon.astro';
+import PageIntro from '@/components/PageIntro.astro';
+import { site } from '@/data/site';
+import '@/styles/sections.css';
+---
+<Site title="关于我" description="认识 Hikari，了解这个个人空间的来由。">
+  <PageIntro name="关于我" en="About" description="你好，我是 Hikari。这是我用来写笔记、整理项目和保存生活片段的地方。" />
+  <dl class="about-list">
+    <div><dt>技术兴趣</dt><dd>C++、算法与计算机科学。</dd></div>
+    <div><dt>个人经历</dt><dd>留给之后想公开分享的经历。</dd></div>
+    <div><dt>联系方式</dt><dd><a href={site.github}>GitHub · Hikari-wz <Icon name="diagonal" size={15} /></a></dd></div>
+  </dl>
+</Site>

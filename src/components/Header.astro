@@ -1,0 +1,28 @@
+---
+import { nav, site } from '@/data/site';
+import ThemeControl from './ThemeControl.astro';
+import Icon from './Icon.astro';
+const path = Astro.url.pathname;
+const active = (href: string) => href === '/' ? path === '/' : path.startsWith(href);
+---
+<header class="header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/" lang="en"><img alt="" src="/mark.svg" width="32" height="32" />{site.name}</a>
+    <nav aria-label="主导航" class="desktop-nav">{nav.map(link => <a href={link.href} aria-current={active(link.href) ? (path === link.href ? 'page' : 'location') : undefined}>{link.label}</a>)}</nav>
+    <div class="header-tools"><ThemeControl />
+      <details class="mobile-menu">
+        <summary aria-label="导航菜单"><Icon name="menu" /></summary>
+        <nav aria-label="移动导航">{nav.map(link => <a href={link.href} aria-current={active(link.href) ? (path === link.href ? 'page' : 'location') : undefined}>{link.label}</a>)}</nav>
+      </details>
+    </div>
+  </div>
+</header>
+<script>
+  const menu = document.querySelector<HTMLDetailsElement>('.mobile-menu')!;
+  document.addEventListener('click', e => {
+    if (e.target instanceof Node && !menu.contains(e.target)) menu.open = false;
+  });
+  menu.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { menu.open = false; menu.querySelector('summary')?.focus(); }
+  });
+</script>

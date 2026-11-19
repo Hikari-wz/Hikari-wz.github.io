@@ -1,0 +1,28 @@
+---
+import Icon from './Icon.astro';
+---
+<div class="theme-control" hidden>
+  <span class="theme-state" aria-hidden="true"><i data-choice="system"><Icon name="system" /></i><i data-choice="light"><Icon name="sun" /></i><i data-choice="dark"><Icon name="moon" /></i></span>
+  <select aria-label="主题偏好" title="选择主题">
+    <option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option>
+  </select>
+</div>
+<script>
+  const control = document.querySelector<HTMLElement>('.theme-control')!;
+  const select = control.querySelector('select')!;
+  function reflect(value: string | null) {
+    const theme = value === 'dark' || value === 'light' ? value : 'system';
+    document.documentElement.dataset.theme = theme;
+    select.value = theme;
+    select.title = '主题 · ' + select.selectedOptions[0].text;
+  }
+  reflect(document.documentElement.dataset.theme ?? null);
+  control.hidden = false;
+  select.addEventListener('change', () => {
+    reflect(select.value);
+    try { localStorage.setItem('hikari-theme', select.value); } catch { /* 本次页面仍然生效 */ }
+  });
+  window.addEventListener('storage', e => {
+    if (e.key === 'hikari-theme' || e.key === null) reflect(e.newValue);
+  });
+</script>

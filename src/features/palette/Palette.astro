@@ -1,0 +1,16 @@
+---
+const swatches = [
+  { name: '墨绿', color: '#28493E' },
+  { name: '湖蓝', color: '#426B7E' },
+  { name: '陶红', color: '#99482E' },
+  { name: '麦金', color: '#866335' }
+];
+---
+<figure class="palette"><div class="swatches">{swatches.map(s => <div><span style={{backgroundColor:s.color}}></span><b>{s.name}</b><code>{s.color}</code></div>)}</div><figcaption>站点的四种强调色</figcaption></figure>
+<style>
+  .swatches { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .65rem; }
+  .swatches span { display: block; height: 4rem; border-radius: .35rem; }
+  .swatches b, .swatches code { display: block; font-size: .83rem; margin-top: .25rem; }
+  .palette figcaption { color: var(--muted); font-size: .8rem; margin-top: .5rem; }
+  @media (max-width: 450px) { .swatches { grid-template-columns: repeat(2,1fr); } }
+</style>

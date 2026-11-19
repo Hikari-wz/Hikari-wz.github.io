@@ -1,0 +1,10 @@
+---
+import { visibleEntries } from '@/lib/entries';
+import Site from '@/layouts/Site.astro';
+import Article from '@/components/Article.astro';
+export async function getStaticPaths() {
+  return (await visibleEntries('journal')).map(entry => ({params: { id: entry.id }, props: { entry }}));
+}
+const { entry } = Astro.props;
+---
+<Site entry={entry}><Article entry={entry}/></Site>

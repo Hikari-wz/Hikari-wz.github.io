@@ -1,0 +1,11 @@
+---
+import Site from '@/layouts/Site.astro';
+import JournalIndex from '@/components/JournalIndex.astro';
+import { categories } from '@/data/site';
+import '@/styles/sections.css';
+export function getStaticPaths() {
+  return (Object.keys(categories) as (keyof typeof categories)[]).map(category => ({params: { category }, props: { category }}));
+}
+const { category } = Astro.props;
+---
+<Site title={categories[category] + ' · 记录空间'} description={'Hikari 的' + categories[category] + '记录。'}><JournalIndex category={category}/></Site>

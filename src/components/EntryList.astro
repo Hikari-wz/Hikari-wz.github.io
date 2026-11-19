@@ -1,0 +1,15 @@
+---
+import EntryStatus from '@/components/EntryStatus.astro';
+import type { Entry } from '@/lib/entries';
+import { collectionLabels, href, isoDay, modified } from '@/lib/entries';
+import Icon from './Icon.astro';
+interface Props { entries: Entry[]; empty?: string }
+const { entries, empty = '这个分类还没有文章。' } = Astro.props;
+---
+{entries.length ? <ul class="entry-list" role="list">{entries.map(entry => <li>
+  <a class="entry-row" href={href(entry)}>
+    <time datetime={isoDay(modified(entry))}>{isoDay(modified(entry)).replaceAll('-', '.')}</time>
+    <div class="row-title"><span>{entry.data.title}</span><EntryStatus data={entry.data} /></div>
+    <span class="row-type">{collectionLabels[entry.collection]}</span>
+    <Icon name="arrow" size={18}/>
+  </a></li>)}</ul> : <p class="empty">{empty}</p>}

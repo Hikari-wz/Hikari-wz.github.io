@@ -1,0 +1,8 @@
+---
+import Site from '@/layouts/Site.astro';
+import PageIntro from '@/components/PageIntro.astro';
+import EntryList from '@/components/EntryList.astro';
+import { visibleEntries, newestFirst } from '@/lib/entries';
+const entries = (await visibleEntries('lab')).sort(newestFirst);
+---
+<Site title="实验空间" description="个人项目、在线工具与小型交互实验。"><PageIntro name="实验空间" en="Lab" description="一些可以打开、可以动手试试的小作品。" /><div class="section-heading"><h2>项目目录</h2><span>Projects</span></div><EntryList entries={entries} /></Site>
