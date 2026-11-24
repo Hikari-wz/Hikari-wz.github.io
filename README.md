@@ -1,6 +1,6 @@
 # Hikari’s Space
 
-Hikari 的个人数字空间，站点地址为 <https://hikari-wz.github.io/>。Astro 在构建时生成独立 HTML，浏览器按页面加载主题与导航等少量脚本。日常写作使用 Markdown，项目页可以在 MDX 中嵌入独立组件。
+Hikari 的个人数字空间，站点地址为 <https://hikari.wang/>。Astro 在构建时生成独立 HTML，浏览器按页面加载主题与导航等少量脚本。日常写作使用 Markdown，项目页可以在 MDX 中嵌入独立组件。
 
 ## 在自己的电脑上运行
 

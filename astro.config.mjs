@@ -12,7 +12,7 @@ const math = {
 };
 
 export default defineConfig({
-  site: 'https://hikari-wz.github.io',
+  site: 'https://hikari.wang',
   output: 'static',
   trailingSlash: 'always',
   prerenderConflictBehavior: 'error',

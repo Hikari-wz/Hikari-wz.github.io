@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hikari-wz.github.io/sitemap-index.xml
+Sitemap: https://hikari.wang/sitemap-index.xml

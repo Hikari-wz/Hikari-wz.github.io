@@ -5,7 +5,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 from xml.etree import ElementTree
 
 root = Path("dist")
-site = "https://hikari-wz.github.io"
+site = "https://hikari.wang"
 
 
 class Document(HTMLParser):
