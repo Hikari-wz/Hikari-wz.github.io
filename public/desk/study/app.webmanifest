@@ -1,0 +1,16 @@
+{
+  "id": "/desk/study/",
+  "name": "Hikari’s Desk",
+  "short_name": "学习工作台",
+  "description": "学习预算、考试计划与本地学习记录",
+  "lang": "zh-CN",
+  "start_url": "/desk/study/",
+  "scope": "/desk/study/",
+  "display": "standalone",
+  "background_color": "#faf9f5",
+  "theme_color": "#faf9f5",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

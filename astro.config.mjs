@@ -5,6 +5,7 @@ import sitemap from '@astrojs/sitemap';
 import tailwind from '@tailwindcss/vite';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import studyPwa from './scripts/study-pwa.mjs';
 
 const math = {
   remarkPlugins: [remarkMath],
@@ -16,7 +17,7 @@ export default defineConfig({
   output: 'static',
   trailingSlash: 'always',
   prerenderConflictBehavior: 'error',
-  integrations: [mdx(), sitemap()],
+  integrations: [mdx(), sitemap(), studyPwa()],
   vite: { plugins: [tailwind()] },
   devToolbar: { enabled: false },
   markdown: {
