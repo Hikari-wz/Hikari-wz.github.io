@@ -49,7 +49,7 @@ def destination(pathname):
     return dest / "index.html" if dest.is_dir() else dest
 
 
-required = ["/", "/journal/", "/learn/", "/lab/", "/desk/", "/about/", "/404.html"]
+required = ["/", "/journal/", "/learn/", "/lab/", "/desk/", "/desk/study/", "/about/", "/404.html"]
 for route in required + ["/robots.txt", "/sitemap-index.xml"]:
     assert destination(route).is_file(), f"Missing {route}"
 

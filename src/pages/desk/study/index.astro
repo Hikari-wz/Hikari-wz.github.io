@@ -1,0 +1,42 @@
+---
+import Site from '@/layouts/Site.astro';
+import Icon from '@/components/Icon.astro';
+import Policy from '@/features/study/Policy.astro';
+import '@/features/study/study.css';
+
+const sections = [
+  { id: 'overview', label: '概览', icon: 'chart' },
+  { id: 'plan', label: '计划', icon: 'plan' },
+  { id: 'records', label: '记录', icon: 'check' },
+  { id: 'policy', label: '制度', icon: 'book' },
+] as const;
+---
+<Site title="学习工作台" description="每周学习预算、考试安排与记录，保存在当前设备。" viewportFit>
+  <Fragment slot="head">
+    <link rel="manifest" href="/desk/study/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/desk/study/icon-180.png" />
+    <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a201f" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Hikari’s Desk" />
+  </Fragment>
+  <div class="study" id="study">
+    <header class="study-header">
+      <div>
+        <a class="study-breadcrumb" href="/desk/" lang="en">Desk</a>
+        <h1>学习工作台</h1>
+      </div>
+      <button type="button" class="study-action" data-view="settings">设置</button>
+    </header>
+    <nav class="study-nav" aria-label="学习工作台导航">
+      {sections.map(({ id, label, icon }) => <button type="button" data-view={id}><Icon name={icon} size={20} />{label}</button>)}
+    </nav>
+    <div class="study-status" id="study-status" role="status"></div>
+    <div class="study-status" id="study-pwa" role="status" hidden></div>
+    <div id="study-content" aria-busy="true" tabindex="-1"><p>正在打开本地学习工作台…</p></div>
+    <noscript><p>请启用 JavaScript，以便在设备上保存和读取学习数据。</p></noscript>
+    <Policy />
+  </div>
+</Site>
+<script>
+  import '@/features/study/app.ts';
+</script>

@@ -37,6 +37,9 @@ with tempfile.TemporaryDirectory(prefix="hikari-content-") as temp:
         shutil.copy(repo / file, folder / file)
     shutil.copytree(repo / "src", folder / "src", ignore=shutil.ignore_patterns("content"))
     shutil.copytree(repo / "public", folder / "public")
+    (folder / "scripts").mkdir()
+    for file in ["study-pwa.mjs", "study-worker.js"]:
+        shutil.copy(repo / "scripts" / file, folder / "scripts" / file)
     os.symlink(repo / "node_modules", folder / "node_modules", target_is_directory=True)
     for collection in fields:
         entry(folder, collection, f"draft-{collection}", "draft: true", "mdx" if collection == "lab" else "md")
