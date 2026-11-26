@@ -1,0 +1,30 @@
+---
+import Site from '@/layouts/Site.astro';
+import '@/features/study/study.css';
+import '@/features/academic/academic.css';
+---
+<Site title="学业中心" description="课内分配、课程策略与学业复盘，保存在当前浏览器。" viewportFit>
+  <div class="study academic" id="academic">
+    <header class="study-header">
+      <div>
+        <a class="study-breadcrumb" href="/desk/" lang="en">Desk</a>
+        <h1>学业中心</h1>
+      </div>
+      <a class="study-action" href="/desk/study/">学习工作台</a>
+    </header>
+    <nav class="study-nav" aria-label="学业中心导航">
+      <button type="button" data-view="home" aria-current="page">概览</button>
+      <button type="button" data-view="courses">课程</button>
+      <button type="button" data-view="schedule">日程</button>
+      <button type="button" data-view="results">成果</button>
+      <button type="button" data-view="review">周报</button>
+      <button type="button" data-view="settings">设置</button>
+    </nav>
+    <p class="study-status" data-academic-status role="status"></p>
+    <div data-academic-content aria-busy="true" tabindex="-1"><p>正在打开本地学业中心…</p></div>
+    <noscript><p>请启用 JavaScript，以便保存和读取本地数据。</p></noscript>
+  </div>
+</Site>
+<script>
+  import '@/features/academic/app.ts';
+</script>

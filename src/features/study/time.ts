@@ -42,3 +42,16 @@ export function duration(minutes: number) {
   const rest = minutes % 60;
   return hours ? `${hours} 小时${rest ? ` ${rest} 分` : ''}` : `${rest} 分钟`;
 }
+
+// Find the first instant of the civil day, including zones with midnight transitions.
+export function startOfDay(day: string, timezone: string) {
+  const utc = +civilDate(day);
+  let low = utc - 2 * dayMs;
+  let high = utc + 2 * dayMs;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (localClock(middle, timezone).day < day) low = middle;
+    else high = middle;
+  }
+  return high;
+}

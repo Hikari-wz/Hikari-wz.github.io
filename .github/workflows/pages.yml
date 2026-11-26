@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:content
       - run: npm run test:browser
       - run: npm run test:study
+      - run: npm run test:academic
       - uses: actions/upload-pages-artifact@v4
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:

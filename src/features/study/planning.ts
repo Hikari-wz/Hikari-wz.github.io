@@ -3,9 +3,12 @@ import { clockMinute, dayDistance, daysOf, localClock } from './time.ts';
 
 export type LocalTime = ReturnType<typeof localClock>;
 
+export const untimedCutoff = (settings: Settings) =>
+  ({ endOfDay: 1440, midday: 720, startOfDay: 0 })[settings.untimedExam];
+
 export function examCutoff(exam: Exam, settings: Settings) {
   if (exam.end) return clockMinute(exam.end);
-  const fallback = { endOfDay: 1440, midday: 720, startOfDay: 0 }[settings.untimedExam];
+  const fallback = untimedCutoff(settings);
   return Math.max(exam.start ? clockMinute(exam.start) + 1 : 0, fallback);
 }
 

@@ -1,8 +1,9 @@
+import type { DeskData } from '../academic/model.ts';
 import {
   defaultSettings, phaseNames, phases, tracks, type Exam, type Review, type Session, type Settings, type Split, type StudyData, type Track,
 } from './model.ts';
 import { calculateBudget, timerMs } from './planning.ts';
-import { exportBackup, importBackup, openStudyRepository, type StudyRepository } from './storage.ts';
+import { channelName, exportBackup, importBackup, openStudyRepository, requireCurrent, type StudyRepository } from './storage.ts';
 import { targetsOf } from './statistics.ts';
 import { localClock, monday, shiftDay, validDay, validTimezone } from './time.ts';
 import {
@@ -18,7 +19,7 @@ const policy = container.querySelector<HTMLTemplateElement>('#study-policy')!;
 const views = ['overview', 'plan', 'records', 'policy', 'settings', 'review'] as const;
 type View = typeof views[number];
 let active: View = 'overview';
-let data: StudyData;
+let data: DeskData;
 let repository: StudyRepository;
 let week = '';
 let reviewWeek = '';
@@ -95,7 +96,6 @@ function render() {
 
 async function commit(change: Parameters<StudyRepository['update']>[0], message: string) {
   data = await repository.update(change);
-  channel?.postMessage('changed');
   notify(message);
 }
 
@@ -185,10 +185,11 @@ async function saveForm(form: HTMLFormElement) {
     await commit(state => {
       if (finishing) {
         if (!state.timer || state.timer.id !== key) throw new Error('该计时已在另一个窗口结束。');
+        requireCurrent(state.timer, data.timer);
         record.subjectId = state.timer.subjectId;
         state.timer = null;
-      } else if (key && !state.sessions.some(item => item.id === key)) {
-        throw new Error('这条学习记录已被删除。');
+      } else if (key) {
+        requireCurrent(state.sessions.find(item => item.id === key), data.sessions.find(item => item.id === key));
       }
       replace(state.sessions, item => item.id === record.id, record);
     }, '学习记录已保存。');
@@ -217,6 +218,7 @@ async function saveForm(form: HTMLFormElement) {
             throw new Error(`自定目标合计应为 ${budget.allocatable} 分钟。`);
           }
           const previous = state.plans.find(plan => plan.week === key);
+          requireCurrent(previous, data.plans.find(plan => plan.week === key));
           replace(state.plans, plan => plan.week === key, {
             week: key, minutes: days, beforeExam: before, budget, manual, focus: text('focus'),
             previousTargets: previous ? targetsOf(previous) : null, revision: (previous?.revision ?? 0) + 1, updatedAt: Date.now(),
@@ -234,7 +236,7 @@ async function saveForm(form: HTMLFormElement) {
         if (exam.start && exam.end && exam.start >= exam.end) throw new Error('考试结束时间必须晚于开始时间。');
         await commit(state => {
           const previous = state.exams.find(item => item.id === key);
-          if (key && !previous) throw new Error('该考试已被删除。');
+          if (key) requireCurrent(previous, data.exams.find(item => item.id === key));
           if (exam.status === 'completed') exam.closedAt = previous?.closedAt ?? Date.now();
           replace(state.exams, item => item.id === exam.id, exam);
         }, '考试已保存，当前阶段已重新计算。');
@@ -251,6 +253,7 @@ async function saveForm(form: HTMLFormElement) {
           throw new Error('每个阶段的三类比例相加必须为 100%。');
         }
         await commit(state => {
+          requireCurrent(state.settings, data.settings);
           state.settings = {
             timezone, ratios, buffer: integer(fields, 'buffer'), override: text('override') as Settings['override'],
             vacation: fields.has('vacation'), untimedExam: text('untimedExam') as Settings['untimedExam'],
@@ -267,6 +270,10 @@ async function saveForm(form: HTMLFormElement) {
         await commit(state => {
           const subject = state.subjects.find(item => item.id === key);
           if (!subject) throw new Error('这个科目已不存在。');
+          requireCurrent(subject, data.subjects.find(item => item.id === key));
+          if (subject.track === 'school' && subject.name !== text('name')) {
+            state.academic.aliases.push({ subjectId: subject.id, name: subject.name });
+          }
           subject.name = text('name');
         }, '名称已更新。');
         break;
@@ -275,7 +282,10 @@ async function saveForm(form: HTMLFormElement) {
           week: key, balance: text('balance'), knowledge: text('knowledge'), results: text('results'),
           issues: text('issues'), nextFocus: text('nextFocus'),
         };
-        await commit(state => replace(state.reviews, item => item.week === key, review), '复盘已保存。');
+        await commit(state => {
+          requireCurrent(state.reviews.find(item => item.week === key), data.reviews.find(item => item.week === key));
+          replace(state.reviews, item => item.week === key, review);
+        }, '复盘已保存。');
         break;
       }
     }
@@ -342,6 +352,7 @@ async function action(button: HTMLButtonElement) {
     case 'reset-ratios':
       if (!confirm('恢复五个学习阶段的默认比例和 10% 机动时间？已保存的周预算继续使用原快照。')) return;
       await commit(state => {
+        requireCurrent(state.settings, data.settings);
         const defaults = defaultSettings();
         state.settings.ratios = defaults.ratios;
         state.settings.buffer = defaults.buffer;
@@ -349,7 +360,10 @@ async function action(button: HTMLButtonElement) {
       break;
     case 'delete-exam':
       if (!confirm('删除这场考试？')) return;
-      await commit(state => { state.exams = state.exams.filter(exam => exam.id !== key); }, '考试已删除。');
+      await commit(state => {
+        requireCurrent(state.exams.find(item => item.id === key), data.exams.find(item => item.id === key));
+        state.exams = state.exams.filter(exam => exam.id !== key);
+      }, '考试已删除。');
       if (examId === key) examId = '';
       break;
     case 'complete-exam':
@@ -357,13 +371,17 @@ async function action(button: HTMLButtonElement) {
       await commit(state => {
         const exam = state.exams.find(item => item.id === key);
         if (!exam) throw new Error('该考试已不存在。');
+        requireCurrent(exam, data.exams.find(item => item.id === key));
         exam.status = button.dataset.action === 'complete-exam' ? 'completed' : 'cancelled';
         exam.closedAt = exam.status === 'completed' ? Date.now() : undefined;
       }, '考试状态已更新，当前阶段已重新计算。');
       break;
     case 'delete-session':
       if (!confirm('删除这条学习记录？相关统计会立即更新。')) return;
-      await commit(state => { state.sessions = state.sessions.filter(session => session.id !== key); }, '学习记录已删除。');
+      await commit(state => {
+        requireCurrent(state.sessions.find(item => item.id === key), data.sessions.find(item => item.id === key));
+        state.sessions = state.sessions.filter(session => session.id !== key);
+      }, '学习记录已删除。');
       if (sessionId === key) sessionId = '';
       break;
     case 'archive':
@@ -373,6 +391,7 @@ async function action(button: HTMLButtonElement) {
         const index = state.subjects.findIndex(subject => subject.id === key);
         const subject = state.subjects[index];
         if (!subject) throw new Error('这个科目已不存在。');
+        requireCurrent(subject, data.subjects.find(item => item.id === key));
         if (button.dataset.action === 'archive') {
           subject.archived = !subject.archived;
           return;
@@ -393,6 +412,7 @@ async function action(button: HTMLButtonElement) {
       const instant = Date.now();
       await commit(state => {
         if (state.timer?.id !== key) throw new Error('该计时已在另一个窗口结束。');
+        requireCurrent(state.timer, data.timer);
         const timer = state.timer;
         if (timer.runningSince !== null && button.dataset.action !== 'resume-timer') {
           timer.elapsedMs = timerMs(timer, instant);
@@ -413,6 +433,7 @@ async function action(button: HTMLButtonElement) {
       if (!confirm('放弃本次计时？')) return;
       await commit(state => {
         if (state.timer?.id !== key) throw new Error('该计时已在另一个窗口结束。');
+        requireCurrent(state.timer, data.timer);
         state.timer = null;
       }, '本次计时已放弃。');
       break;
@@ -422,19 +443,17 @@ async function action(button: HTMLButtonElement) {
 }
 
 async function handleImport(file: File) {
+  if (file.size > 32 * 1024 * 1024) throw new Error('备份超过 32 MiB，无法读取。');
   const restored = importBackup(await file.text());
   const before = await repository.read();
-  const original = JSON.stringify(before);
-  showDialog('恢复本地备份', `<p>备份包含 ${restored.sessions.length} 条学习记录、${restored.exams.length} 场考试、${restored.plans.length} 份周计划和 ${restored.reviews.length} 份复盘。恢复后将覆盖本设备的全部学习数据。可以先导出当前数据。</p>
+  showDialog('恢复本地备份', `<p>备份包含 ${restored.sessions.length} 条学习记录、${restored.exams.length} 场考试、${restored.plans.length} 份周计划和 ${restored.reviews.length} 份复盘。恢复后将覆盖本浏览器的 Study 和 Academic 数据（含 ${restored.academic.terms.length} 个学期）。备份中${restored.timer ? '有' : '没有'}未结算计时。可以先导出当前数据。</p>
     <div class="study-actions"><button class="study-action" type="button" data-action="backup-before">先导出当前数据</button>
     <button class="study-action danger" type="button" data-action="confirm-restore">确认覆盖并恢复</button>
     <button class="study-action" type="button" data-action="close-dialog">取消</button></div>`);
   dialog?.querySelector('[data-action="backup-before"]')?.addEventListener('click', () => downloadBackup(before));
   dialog?.querySelector('[data-action="confirm-restore"]')?.addEventListener('click', () => run(async () => {
-    await commit(state => {
-      if (JSON.stringify(state) !== original) throw new Error('备份确认期间本地数据发生了变化。请关闭此窗口并重新选择备份。');
-      return restored;
-    }, '完整备份已恢复。');
+    data = await repository.restore(before, restored);
+    notify('完整备份已恢复。');
     dialog?.close();
     week = '';
     reviewWeek = '';
@@ -564,9 +583,10 @@ try {
   repository = await openStudyRepository();
   data = await repository.read();
   if (typeof BroadcastChannel === 'function') {
-    channel = new BroadcastChannel('hikari-study-dashboard');
+    channel = new BroadcastChannel(channelName);
     channel.addEventListener('message', () => void refresh().catch(report));
   }
+  window.addEventListener('focus', () => void refresh().catch(report));
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) void refresh().catch(report);
   });
@@ -580,7 +600,7 @@ try {
 } catch (error) {
   report(error);
   content.setAttribute('aria-busy', 'false');
-  content.textContent = '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。';
+  content.textContent = '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。如需从备份恢复，请打开学业中心。';
 }
 
 setupOffline(container.querySelector<HTMLElement>('#study-pwa')!);
