@@ -3,11 +3,14 @@ import {
   defaultSettings, phaseNames, phases, tracks, type Exam, type Review, type Session, type Settings, type Split, type StudyData, type Track,
 } from './model.ts';
 import { calculateBudget, timerMs } from './planning.ts';
-import { channelName, exportBackupBlob, importBackupFile, openStudyRepository, requireCurrent, type StudyRepository } from './storage.ts';
+import {
+  channelName, exportBackupBlob, importBackupFile, LegacyStudyUpgradeError, openStudyRepository,
+  readLegacyStudy, requireCurrent, type StudyRepository,
+} from './storage.ts';
 import { targetsOf } from './statistics.ts';
 import { localClock, monday, shiftDay, validDay, validTimezone } from './time.ts';
 import {
-  allocationText, budgetPreview, overview, planView, qualityOptions, recordsView, reviewView, sessionForm,
+  allocationText, budgetPreview, history, overview, planView, qualityOptions, recordsView, reviewView, sessionForm,
   settingsView, stageText, subjectOptions, timerText, type RecordFilters,
 } from './views.ts';
 import { setupOffline } from './offline.ts';
@@ -21,6 +24,7 @@ type View = typeof views[number];
 let active: View = 'overview';
 let data: DeskData;
 let repository: StudyRepository;
+let legacySnapshot: StudyData | undefined;
 let week = '';
 let reviewWeek = '';
 let examId = '';
@@ -59,6 +63,19 @@ function updateView(target: View, section?: string) {
 }
 
 function render() {
+  if (legacySnapshot) {
+    const time = localClock(Date.now(), legacySnapshot.settings.timezone);
+    content.innerHTML = `<section class="study-card">
+      <h2>旧数据只读模式</h2>
+      <p>数据库升级未完成。你可以查看历史或导出完整的 v1 备份。原计时会保留，升级成功后可以继续。</p>
+      <div class="study-actions">
+        <button type="button" class="study-action primary" data-action="export-legacy">导出 v1 备份</button>
+        <button type="button" class="study-action" data-action="retry-upgrade">重试升级</button>
+      </div>
+    </section>${history(legacySnapshot, time, filters, true)}`;
+    content.setAttribute('aria-busy', 'false');
+    return;
+  }
   const open = [...content.querySelectorAll<HTMLDetailsElement>('details[data-keep][open]')].map(item => item.dataset.keep);
   const time = now();
   renderedMinute = `${time.day}:${time.minute}`;
@@ -156,7 +173,7 @@ function downloadBackup(snapshot: StudyData) {
   const url = URL.createObjectURL(exportBackupBlob(snapshot));
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `hikari-study-${now().day}.json`;
+  anchor.download = `hikari-study-${localClock(Date.now(), snapshot.settings.timezone).day}.json`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -473,7 +490,7 @@ function focusHistory(name?: string) {
 }
 
 async function run(task: () => Promise<void>) {
-  if (!repository || busy) return;
+  if ((!repository && !legacySnapshot) || busy) return;
   busy = true;
   try {
     await task();
@@ -487,6 +504,25 @@ async function run(task: () => Promise<void>) {
 container.addEventListener('click', event => {
   const button = (event.target as Element | null)?.closest<HTMLButtonElement>('button[data-action], button[data-view]');
   if (!button) return;
+  if (legacySnapshot) {
+    switch (button.dataset.action) {
+      case 'export-legacy':
+        void run(async () => {
+          downloadBackup(await readLegacyStudy());
+          notify('v1 备份文件已生成。');
+        });
+        break;
+      case 'retry-upgrade':
+        if (!busy) location.reload();
+        break;
+      case 'record-page':
+        filters.page = Number(button.dataset.value);
+        render();
+        focusHistory();
+        break;
+    }
+    return;
+  }
   if (!repository) {
     if (button.dataset.view === 'policy') {
       content.replaceChildren(policy.content.cloneNode(true));
@@ -500,7 +536,7 @@ container.addEventListener('click', event => {
 container.addEventListener('submit', event => {
   const form = event.target as HTMLFormElement;
   event.preventDefault();
-  if (form.dataset.form !== 'filter') void run(() => saveForm(form));
+  if (repository && form.dataset.form !== 'filter') void run(() => saveForm(form));
 });
 
 container.addEventListener('change', event => {
@@ -512,7 +548,7 @@ container.addEventListener('change', event => {
     return;
   }
   const form = control.form;
-  if (!form || !data) return;
+  if (!form || (!data && !legacySnapshot)) return;
   if (form.dataset.form === 'filter') {
     const fields = new FormData(form);
     filters = { week: read(fields, 'week'), track: read(fields, 'track'),
@@ -538,7 +574,7 @@ container.addEventListener('change', event => {
   if (control.id !== 'study-backup-file' || !control.files?.length) return;
   const file = control.files[0];
   control.value = '';
-  void run(() => handleImport(file));
+  if (repository) void run(() => handleImport(file));
 });
 
 function updateClock() {
@@ -601,8 +637,20 @@ try {
   render();
 } catch (error) {
   report(error);
-  content.setAttribute('aria-busy', 'false');
-  content.textContent = '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。如需从备份恢复，请打开学业中心。';
+  if (error instanceof LegacyStudyUpgradeError) {
+    try {
+      legacySnapshot = await readLegacyStudy();
+    } catch {
+      // A damaged or already migrated database is not a readable v1 snapshot.
+    }
+  }
+  if (legacySnapshot) {
+    for (const button of container.querySelectorAll<HTMLButtonElement>('button[data-view]')) button.disabled = true;
+    render();
+  } else {
+    content.setAttribute('aria-busy', 'false');
+    content.textContent = '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。如需从备份恢复，请打开学业中心。';
+  }
 }
 
 setupOffline(container.querySelector<HTMLElement>('#study-pwa')!);

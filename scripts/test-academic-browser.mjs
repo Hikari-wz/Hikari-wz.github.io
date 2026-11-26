@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, devices } from 'playwright-core';
 import ts from 'typescript';
+import { migrateStudy } from '../src/features/academic/model.ts';
 import { backupLimit, exportBackup, exportBackupBlob } from '../src/features/study/storage.ts';
 import { instant, largeBackupData, legacy, mondayAt, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
 
@@ -531,6 +532,100 @@ try {
     await ctx.close();
     console.log('Review P1: actual v1 worker, ' + (failUpdate ? 'failed update preserves old offline access; retry' : 'first Academic visit') +
       ' primes the new cache, fences the old tab, and permits one offline timer save.');
+  }
+
+  if (process.env.ACADEMIC_LEGACY_DIST) {
+    const ctx = await browser.newContext({ ...contextOptions, serviceWorkers: 'allow' });
+    const stale = await ctx.newPage();
+    const studyPage = await ctx.newPage();
+    const a = await ctx.newPage();
+    const later = mondayAt + 3600000;
+    for (const page of [stale, studyPage, a]) await at(page, later);
+    const old = legacy({ pause: true });
+    old.subjects[0].archived = false;
+    await seed(stale, old, 1);
+    legacyShell = true;
+    await stale.goto(study);
+    await stale.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await button(stale, '快速补录').click();
+    const session = form(stale, 'session');
+    await session.getByLabel('科目或项目').selectOption('school-0');
+    await session.getByLabel('实际时长').fill('52');
+    await button(session, '保存学习记录').click();
+    await studyStatus(stale, '学习记录已保存');
+    const initial = await raw(stale);
+    assert.equal(initial.version, 1);
+    assert.equal(initial.payload.data.sessions.at(-1).minutes, 52);
+    await button(stale, '记录').click();
+    await studyPage.goto(study);
+    await studyPage.waitForFunction(() => !!navigator.serviceWorker.controller);
+    const oldWorker = await readFile(dist.legacy + workerPath, 'utf8');
+    const oldCache = 'hikari-study-shell-' + oldWorker.match(/const BUILD_VERSION = "([^"]+)"/)[1];
+    assert.ok(await studyPage.evaluate(key => caches.has(key), oldCache));
+
+    await ctx.addInitScript(() => {
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (value, key) {
+        if (sessionStorage.getItem('migration-quota-cleared') !== 'yes' &&
+            this.transaction.mode === 'versionchange' && value?.version === 2 && key === 'current') {
+          throw new DOMException('Synthetic upgrade write quota', 'QuotaExceededError');
+        }
+        return put.call(this, value, key);
+      };
+    });
+    legacyShell = false;
+    await a.goto(academic);
+    await readStatus(a, 'Synthetic upgrade write quota');
+    assert.deepEqual(await raw(a), initial);
+    const newWorker = await readFile(dist.current + workerPath, 'utf8');
+    const newCache = 'hikari-study-shell-' + newWorker.match(/const BUILD_VERSION = "([^"]+)"/)[1];
+    await a.waitForFunction(async ([oldKey, newKey]) => await caches.has(newKey) && !(await caches.has(oldKey)), [oldCache, newCache]);
+
+    await ctx.setOffline(true);
+    await studyPage.reload();
+    await studyPage.getByRole('heading', { name: '旧数据只读模式' }).waitFor();
+    await studyStatus(studyPage, 'Synthetic upgrade write quota');
+    await form(studyPage, 'filter').locator('[name=track]').selectOption('school');
+    await studyPage.locator('.study-list li').filter({ hasText: '52 分钟' }).waitFor();
+    for (const action of ['编辑', '删除', '继续', '结束并保存', '选择备份恢复']) {
+      assert.equal(await button(studyPage, action).count(), 0);
+    }
+    const downloaded = studyPage.waitForEvent('download');
+    await button(studyPage, '导出 v1 备份').click();
+    const { exportedAt, ...backup } = JSON.parse(await readFile(await (await downloaded).path(), 'utf8'));
+    assert.ok(Number.isFinite(Date.parse(exportedAt)));
+    assert.deepEqual(backup, initial.payload);
+    assert.deepEqual(await raw(studyPage), initial);
+
+    await studyPage.evaluate(() => sessionStorage.setItem('migration-quota-cleared', 'yes'));
+    await button(studyPage, '重试升级').click();
+    await studyPage.getByRole('heading', { name: '当前学习阶段' }).waitFor();
+    assert.equal(await studyPage.evaluate(() => navigator.onLine), false);
+    const migrated = await raw(studyPage);
+    assert.equal(migrated.version, 2);
+    assert.deepEqual(migrated.payload.data, migrateStudy(initial.payload.data));
+    await button(stale, '继续').click();
+    await studyStatus(stale, '操作未完成');
+    assert.deepEqual(await raw(studyPage), migrated);
+
+    await button(studyPage, '记录').click();
+    await alert(studyPage, '#study-timer', '已暂停');
+    await button(studyPage, '继续').click();
+    await alert(studyPage, '#study-timer', '进行中');
+    await at(studyPage, later + 120000);
+    await button(studyPage, '结束并保存').click();
+    const finish = studyPage.getByRole('dialog');
+    assert.equal(await finish.getByLabel('实际时长').inputValue(), '3');
+    await button(finish, '保存计时记录').click();
+    await studyStatus(studyPage, '学习记录已保存');
+    await studyPage.reload();
+    await studyPage.getByRole('heading', { name: '当前学习阶段' }).waitFor();
+    const saved = (await raw(studyPage)).payload.data;
+    assert.equal(saved.timer, null);
+    assert.deepEqual(saved.sessions.filter(item => item.id !== old.timer.id), initial.payload.data.sessions);
+    assert.equal(saved.sessions.filter(item => item.id === old.timer.id).length, 1);
+    await ctx.close();
+    console.log('Review P1: v1 worker replaced before a real IDB upgrade abort; offline history and exact v1 download work, offline retry preserves every field, and the old timer is saved just once.');
   }
 
   // Review P2: same UTF-8 v2 file restored and re-exported in both real UIs.

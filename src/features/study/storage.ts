@@ -159,6 +159,40 @@ export function requireCurrent(current: unknown, original: unknown) {
   if (!same(current, original)) throw new Error('此项在另一个窗口已变更，请重新打开后重试。');
 }
 
+export class LegacyStudyUpgradeError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : '旧版学习工作台数据升级失败。', { cause });
+  }
+}
+
+export function readLegacyStudy(): Promise<StudyData> {
+  return new Promise((resolve, reject) => {
+    // Opening an explicit version rejects a v2 database. Abort if no database exists.
+    const request = indexedDB.open(channelName, 1);
+    request.onupgradeneeded = () => request.transaction!.abort();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      try {
+        const transaction = database.transaction('state', 'readonly');
+        const read = transaction.objectStore('state').get('current');
+        transaction.oncomplete = () => {
+          const input: unknown = read.result;
+          if (object(input) && input.format === format && input.version === 1 &&
+              validData(input.data) && !('academic' in input.data)) resolve(input.data);
+          else reject(new Error('无法校验旧版学习工作台快照。'));
+        };
+        transaction.onabort = () => reject(transaction.error ?? new Error('旧版学习工作台读取中断。'));
+      } catch (error) {
+        reject(error);
+      } finally {
+        // Let the readonly transaction finish without holding the version open.
+        database.close();
+      }
+    };
+  });
+}
+
 export async function openStudyRepository(recovery?: DeskData): Promise<StudyRepository> {
   if (recovery) assertValid(recovery);
   await prepareStudyMigration(channelName, schemaVersion);
@@ -173,6 +207,7 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
   const database = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(channelName, schemaVersion);
     let cancelled = false;
+    let upgradingLegacy = false;
     let cause: unknown;
     request.onupgradeneeded = event => {
       const transaction = request.transaction!;
@@ -180,6 +215,7 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
         transaction.abort();
         return;
       }
+      upgradingLegacy = event.oldVersion === 1;
       const store = event.oldVersion === 0 ? request.result.createObjectStore('state') : transaction.objectStore('state');
       const old = store.get('current');
       old.onsuccess = () => {
@@ -192,7 +228,8 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
             recoveredDuringUpgrade = true;
           }
           assertValid(data);
-          store.put(serialize(data), 'current');
+          const write = store.put(serialize(data), 'current');
+          write.onerror = () => { cause = write.error; };
         } catch (error) {
           cause = error;
           transaction.abort();
@@ -203,7 +240,10 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
       if (cancelled) request.result.close();
       else resolve(request.result);
     };
-    request.onerror = () => reject(cause ?? request.error);
+    request.onerror = () => {
+      const error = cause ?? request.error;
+      reject(upgradingLegacy ? new LegacyStudyUpgradeError(error) : error);
+    };
     request.onblocked = () => {
       cancelled = true;
       reject(new Error('数据库升级被其他窗口占用。请关闭旧窗口后重试。'));

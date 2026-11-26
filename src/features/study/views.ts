@@ -246,17 +246,17 @@ export function timerText(data: StudyData, now: number) {
 
 export type RecordFilters = { track: string; subject: string; week: string; page: number };
 
-function sessionEntries(data: StudyData, sessions: Session[]) {
+function sessionEntries(data: StudyData, sessions: Session[], readOnly: boolean) {
   return list(sessions.map(session => {
     const subject = data.subjects.find(subject => subject.id === session.subjectId)!;
     return `<strong>${e(subject.name)}${subject.archived ? ' <small>已归档</small>' : ''}</strong> · ${duration(session.minutes)}
       <div class="study-muted">${session.day} · ${trackName(subject.track)}${session.quality ? ' · ' + e(session.quality) : ''}</div>
       ${session.note ? `<p>${e(session.note)}</p>` : ''}
-      ${actions(button('编辑', 'edit-session', '', session.id), button('删除', 'delete-session', 'danger', session.id))}`;
+      ${readOnly ? '' : actions(button('编辑', 'edit-session', '', session.id), button('删除', 'delete-session', 'danger', session.id))}`;
   }));
 }
 
-function history(data: StudyData, now: LocalTime, filter: RecordFilters) {
+export function history(data: StudyData, now: LocalTime, filter: RecordFilters, readOnly = false) {
   const current = monday(now.day);
   const weeks = recordedWeeks(data, current);
   const sessions = [...data.sessions].reverse().sort((a, b) => b.day.localeCompare(a.day)).filter(session => {
@@ -280,7 +280,7 @@ function history(data: StudyData, now: LocalTime, filter: RecordFilters) {
     `<small>第 ${page + 1} / ${maxPage + 1} 页</small>`,
     ...(page < maxPage ? [button('下一页', 'record-page', '', String(page + 1))] : [])) : '';
   return card('历史记录', filters + (sessions.length ?
-    sessionEntries(data, sessions.slice(page * size, (page + 1) * size)) + paging
+    sessionEntries(data, sessions.slice(page * size, (page + 1) * size), readOnly) + paging
     : muted(data.sessions.length ? '没有符合筛选条件的记录。' : '暂无记录。')));
 }
 
