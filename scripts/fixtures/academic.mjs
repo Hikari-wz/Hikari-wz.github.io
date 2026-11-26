@@ -60,13 +60,21 @@ export function academic() {
   data.academic.currentTerm = term.id;
   return { data, term };
 }
-export function sundayFixture() {
+export function sundayFixture({ activates = true } = {}) {
   const { data, term } = academic();
-  data.exams.push(sharedExam('academic-history', '2027-01-19'));
+  if (activates) data.exams.push(sharedExam('academic-history', '2027-01-19'));
   data.plans.push(plan(data));
   data.sessions.push(record('math-time', 'school-0', 60), record('c-time', 'school-2', 340), record('en-time', 'school-1', 250));
   data.academic.results.push(result('math-a', 'school-0', '2026-12-30', 61), result('math-b', 'school-0', '2027-01-01', 65),
     result('c-a', 'school-2', '2026-12-30', 90), result('c-b', 'school-2', '2027-01-01', 91));
   data.academic.versions.push({ at: instant('2026-12-01T00:00:00'), inputs: structuredClone(inputsOf(data)) });
   return { data, term };
+}
+
+export function largeBackupData() {
+  const { data } = sundayFixture();
+  const note = '测'.repeat(2000);
+  data.sessions = Array.from({ length: 5600 }, (_, index) =>
+    ({ ...record('sample-' + index, 'school-0', 15, '2027-01-03'), note }));
+  return data;
 }

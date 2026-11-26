@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { chromium, devices } from 'playwright-core';
 import ts from 'typescript';
-import { exportBackup } from '../src/features/study/storage.ts';
-import { legacy, mondayAt, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
+import { backupLimit, exportBackup, exportBackupBlob } from '../src/features/study/storage.ts';
+import { instant, largeBackupData, legacy, mondayAt, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
 
 const study = '/desk/study/';
 const academic = '/desk/academic/';
@@ -15,6 +16,8 @@ const dist = { current: resolve('dist'), legacy: resolve(process.env.ACADEMIC_LE
 const mime = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json',
   webmanifest: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png' };
 let legacyShell = false;
+let blockWorkerUpdate = false;
+const workerPath = study + 'sw.js';
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   try {
@@ -26,7 +29,8 @@ const server = createServer(async (request, response) => {
     }
     const file = path.endsWith('/') ? path + 'index.html' : path;
     if (!/^\/[\w./-]+$/.test(file) || file.includes('..')) return response.writeHead(400).end();
-    const order = path === study && legacyShell ? ['legacy', 'current'] : variants;
+    if (path === workerPath && blockWorkerUpdate) return response.writeHead(503).end();
+    const order = legacyShell && (path === study || path === workerPath) ? ['legacy', 'current'] : variants;
     for (const version of order) {
       try {
         const bytes = await readFile(dist[version] + file);
@@ -450,6 +454,178 @@ try {
     console.log('T04 actual legacy shell: stale edit, timer finish and import fenced after migration; refresh saves one timer record and preserves new history.');
   } else {
     console.log('T04 actual legacy shell skipped. Set ACADEMIC_LEGACY_DIST to the baseline build.');
+  }
+
+  for (const failUpdate of process.env.ACADEMIC_LEGACY_DIST ? [false, true] : []) {
+    const ctx = await browser.newContext({ ...contextOptions, serviceWorkers: 'allow' });
+    const s = await ctx.newPage();
+    const a = await ctx.newPage();
+    const later = mondayAt + 3600000;
+    await at(s, later);
+    await at(a, later);
+    const old = legacy({ pause: true });
+    await seed(s, old, 1);
+    legacyShell = true;
+    await s.goto(study);
+    await s.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await s.locator('#study-content[aria-busy=false]').waitFor();
+    const oldWorker = await readFile(dist.legacy + workerPath, 'utf8');
+    const oldCache = 'hikari-study-shell-' + oldWorker.match(/const BUILD_VERSION = "([^"]+)"/)[1];
+    assert.ok(await s.evaluate(key => caches.has(key), oldCache));
+    await s.reload();
+    await button(s, '记录').click();
+    await alert(s, '#study-timer', '已暂停');
+    const expected = await raw(s);
+
+    legacyShell = false;
+    blockWorkerUpdate = failUpdate;
+    await a.goto(academic);
+    if (failUpdate) {
+      await readStatus(a, '学习工作台的离线版本尚未更新');
+      assert.deepEqual(await raw(a), expected);
+      await ctx.setOffline(true);
+      await s.reload();
+      await button(s, '记录').click();
+      await alert(s, '#study-timer', '已暂停');
+      assert.deepEqual(await raw(s), expected);
+
+      blockWorkerUpdate = false;
+      await ctx.setOffline(false);
+      await button(a, '重试读取').click();
+    }
+    await a.getByRole('heading', { name: '开始使用' }).waitFor();
+    const newWorker = await readFile(dist.current + workerPath, 'utf8');
+    const newCache = 'hikari-study-shell-' + newWorker.match(/const BUILD_VERSION = "([^"]+)"/)[1];
+    assert.notEqual(oldCache, newCache);
+    assert.ok(await a.evaluate(key => caches.has(key), newCache));
+    const migrated = await raw(a);
+    assert.equal(migrated.version, 2);
+    assert.deepEqual(migrated.payload.data.sessions, old.sessions);
+    assert.deepEqual(migrated.payload.data.timer, old.timer);
+
+    // The still-loaded old shell must not be able to resume against schema 2.
+    await button(s, '继续').click();
+    await studyStatus(s, '操作未完成');
+    assert.deepEqual(await raw(a), migrated);
+
+    await ctx.setOffline(true);
+    await s.reload();
+    await button(s, '记录').click();
+    await alert(s, '#study-timer', '已暂停');
+    await s.locator('.study-list').filter({ hasText: 'synthetic record' }).first().waitFor();
+    await button(s, '继续').click();
+    await alert(s, '#study-timer', '进行中');
+    await at(s, later + 120000);
+    await button(s, '结束并保存').click();
+    const finish = s.getByRole('dialog');
+    assert.equal(await finish.getByLabel('实际时长').inputValue(), '3');
+    await button(finish, '保存计时记录').click();
+    await studyStatus(s, '学习记录已保存');
+    await s.reload();
+    await button(s, '记录').click();
+    await button(s, '开始计时').waitFor();
+    const saved = (await raw(s)).payload.data;
+    assert.equal(saved.timer, null);
+    assert.equal(saved.sessions.filter(item => item.id === old.timer.id).length, 1);
+    assert.equal(saved.sessions.find(item => item.id === old.timer.id).minutes, 3);
+    await ctx.close();
+    console.log('Review P1: actual v1 worker, ' + (failUpdate ? 'failed update preserves old offline access; retry' : 'first Academic visit') +
+      ' primes the new cache, fences the old tab, and permits one offline timer save.');
+  }
+
+  // Review P2: same UTF-8 v2 file restored and re-exported in both real UIs.
+  {
+    const dir = await mkdtemp(join(tmpdir(), 'academic-backup-'));
+    try {
+      const generated = largeBackupData();
+      const file = exportBackupBlob(generated);
+      const valid = join(dir, 'valid-utf8.json');
+      const oversized = join(dir, 'too-large.json');
+      await writeFile(valid, Buffer.from(await file.arrayBuffer()));
+      await writeFile(oversized, '');
+      await truncate(oversized, backupLimit + 1);
+      for (const route of [study, academic]) {
+        const ctx = await browser.newContext(contextOptions);
+        const page = await ctx.newPage();
+        await at(page, sunday);
+        const { data } = sundayFixture();
+        await seed(page, data);
+        await page.goto(route);
+        await openSettings(page);
+        const before = await raw(page);
+        const selector = route === study ? '#study-backup-file' : '[data-backup-file]';
+        const status = route === study ? studyStatus : readStatus;
+        await page.locator(selector).setInputFiles(oversized);
+        await status(page, '备份超过 64 MiB');
+        assert.deepEqual(await raw(page), before);
+        await page.locator(selector).setInputFiles(valid);
+        const dialog = page.getByRole('dialog');
+        await dialog.getByText(/5600 条/).waitFor();
+        await button(dialog, '确认覆盖并恢复').click();
+        await status(page, '完整备份已恢复');
+        if (route === academic) await openSettings(page);
+        const download = page.waitForEvent('download');
+        await button(page, route === study ? '导出 JSON' : '导出完整 JSON').click();
+        const returned = JSON.parse(await readFile(await (await download).path(), 'utf8'));
+        assert.equal(returned.version, 2);
+        assert.deepEqual(returned.data, generated);
+        await ctx.close();
+      }
+      console.log('Review P2: ' + file.size + ' bytes (5,600 records, 2,000 Han characters each) restored and re-exported in both UIs; 64 MiB + 1 rejected with unchanged DB.');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  // Review P1: a January 11 UI edit cannot change an adjustment in January 4–10.
+  {
+    const ctx = await browser.newContext(contextOptions);
+    const page = await ctx.newPage();
+    const { data } = sundayFixture({ activates: false });
+    data.plans[0].manual = [800, 100, 0];
+    data.sessions[0].minutes = 110;
+    data.sessions[1].minutes = 300;
+    data.sessions[2].minutes = 150;
+    await at(page, sunday);
+    await seed(page, data);
+    await page.goto(academic);
+    await nav(page, '周报');
+    await button(page, '以今天的数据结束本周预览').click();
+    await button(page, '确认应用').click();
+    await readStatus(page, '调整已确认');
+    await at(page, wednesday);
+    await page.reload();
+    await page.locator('[data-academic-total]').waitFor();
+    const before = (await raw(page)).payload.data.academic.adjustments[0];
+    assert.equal(before.state, 'applied');
+    assert.equal(before.appliedAt, mondayAt);
+    assert.equal(before.endedAt, null);
+    await at(page, instant('2027-01-11T18:00:00'));
+    const closedWeek = async () => {
+      await nav(page, '周报');
+      const selection = form(page, 'review-week');
+      await selection.getByLabel('查看日期所在周').fill('2027-01-04');
+      await button(selection, '查看周报').click();
+      return page.locator('.academic-table').innerText();
+    };
+    const history = await closedWeek();
+    assert.match(history, /57%/);
+    await nav(page, '课程');
+    const course = page.locator('[data-keep="course-school-0"]');
+    await course.locator(':scope > summary').click();
+    await course.locator('[data-keep="params-school-0"] > summary').click();
+    await course.getByLabel('个人成本').fill('2');
+    await button(form(course, 'course'), '保存').click();
+    await readStatus(page, '已保存');
+    // Reload to force a separate shared read transaction after the cost write.
+    await page.reload();
+    await page.locator('[data-academic-total]').waitFor();
+    const after = (await raw(page)).payload.data;
+    assert.equal(after.academic.terms[0].courses[0].cost, 2);
+    assert.deepEqual(after.academic.adjustments[0], before);
+    assert.equal(await closedWeek(), history);
+    await ctx.close();
+    console.log('Review P1: January 11 cost form and subsequent read preserve the January 4–10 target table, state, timestamps and confirmation snapshot.');
   }
 
   // T12: no active page across the date change. Both the read and write entry paths use real IDB.

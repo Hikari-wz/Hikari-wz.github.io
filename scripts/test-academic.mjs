@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { apportion, baselineAt, passesGap, recommend, stageAt, weeklyAllocation } from '../src/features/academic/allocation.ts';
 import { inputsOf, reserveId } from '../src/features/academic/model.ts';
 import { analysisInput, comparable, executionWeek, propose, reconcileUpdate, recordDecision, reviewOf, settle, targetAt } from '../src/features/academic/review.ts';
-import { exportBackup, importBackup } from '../src/features/study/storage.ts';
+import { backupLimit, exportBackup, exportBackupBlob, importBackup, importBackupFile } from '../src/features/study/storage.ts';
 import { localClock, monday, startOfDay } from '../src/features/study/time.ts';
-import { academic, inputWeek, legacy, mondayAt, record, result, sharedExam, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
+import { academic, inputWeek, instant, largeBackupData, legacy, mondayAt, record, result, sharedExam, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
 
 const clock = (day, minute = 720) => ({ day, minute });
 function baseline(data, term, day = inputWeek, minute = 720) {
@@ -277,4 +277,48 @@ test('T12/T14 weekly manual override pauses an applied adjustment without mutati
   data.subjects.find(item => item.id === 'school-0').name = '合成课改名';
   assert.equal(reviewOf(data, term, inputWeek, now + 2000).total, oldResources + 25);
   assert.equal(decision.proposal.evidence.pair[0].value, 61);
+});
+
+test('review P1: January 11 cost change preserves the closed week and the real T12 transition', () => {
+  const following = instant('2027-01-11T18:00:00');
+  const week = '2027-01-04';
+  for (const activates of [false, true]) {
+    const { data, term } = sundayFixture({ activates });
+    data.plans[0].manual = [800, 100, 0];
+    data.sessions[0].minutes = 110;
+    data.sessions[1].minutes = 300;
+    data.sessions[2].minutes = 150;
+    recordDecision(data, propose(data, term, sunday, true), sunday);
+    settle(data, wednesday);
+    const before = structuredClone(data);
+    const decision = before.academic.adjustments[0];
+    const history = reviewOf(before, term, week, following).history;
+    assert.equal(decision.state, activates ? 'paused' : 'applied');
+    assert.equal(decision.appliedAt, mondayAt);
+    assert.equal(decision.endedAt, activates ? tuesdayAt : null);
+    if (!activates) eq(history['school-0'], .97 * 45 / 79 + .02);
+    const tuesdayTarget = targetAt(before, term, tuesdayAt, true);
+    term.courses[0].cost = 2;
+    reconcileUpdate(before, data, following);
+    settle(data, following + 1);
+    assert.deepEqual(data.academic.adjustments[0], decision);
+    assert.deepEqual(reviewOf(data, term, week, following + 1).history, history);
+    assert.deepEqual(targetAt(data, term, mondayAt, true), decision.proposal.after);
+    assert.deepEqual(targetAt(data, term, tuesdayAt, true), tuesdayTarget);
+  }
+});
+
+test('review P2: UTF-8 export round-trips beyond 32 MiB and the shared 64 MiB limit is inclusive', async () => {
+  const data = largeBackupData();
+  const file = exportBackupBlob(data);
+  assert.ok(file.size > 32 * 1024 * 1024 && Math.abs(file.size - 34_570_874) < 20_000);
+  assert.deepEqual(await importBackupFile(file), data);
+  const small = exportBackup(sundayFixture().data);
+  const nearlyFull = new Blob([small, ' '.repeat(backupLimit - Buffer.byteLength(small))]);
+  assert.equal(nearlyFull.size, backupLimit);
+  assert.equal((await importBackupFile(nearlyFull)).academic.terms.length, 1);
+  await assert.rejects(importBackupFile(new Blob([nearlyFull, ' '])), /64 MiB/);
+
+  const bounded = { ...data, sessions: [...data.sessions, ...data.sessions.map(item => ({ ...item, id: 'second-' + item.id }))] };
+  assert.throws(() => exportBackupBlob(bounded), /64 MiB/);
 });

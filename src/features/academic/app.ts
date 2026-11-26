@@ -1,4 +1,4 @@
-import { channelName, exportBackup, importBackup, openStudyRepository, requireCurrent, same, type StudyRepository } from '../study/storage.ts';
+import { channelName, exportBackupBlob, importBackupFile, openStudyRepository, requireCurrent, same, type StudyRepository } from '../study/storage.ts';
 import { localClock, monday, validDay } from '../study/time.ts';
 import type { Exam } from '../study/model.ts';
 import { baselineAt, scheduleOf } from './allocation.ts';
@@ -122,7 +122,7 @@ async function commit(change: (state: DeskData, now: number) => void, message = 
   notify(message);
 }
 function download(state: DeskData) {
-  const url = URL.createObjectURL(new Blob([exportBackup(state)], { type: 'application/json' }));
+  const url = URL.createObjectURL(exportBackupBlob(state));
   const link = document.createElement('a');
   link.href = url;
   link.download = 'hikari-desk-backup-' + clock().day + '.json';
@@ -130,8 +130,7 @@ function download(state: DeskData) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function restore(file: File) {
-  if (file.size > 32 * 1024 * 1024) throw new Error('备份超过 32 MiB，无法读取。');
-  const backup = importBackup(await file.text());
+  const backup = await importBackupFile(file);
   const before = await repository!.read();
   if (before.timer && !same(before.timer, backup.timer)) throw new Error('请先在 Study 结算当前计时，再恢复备份。');
   const dialog = document.createElement('dialog');
@@ -145,7 +144,10 @@ async function restore(file: File) {
     ' 场考试、' + backup.plans.length + ' 份周计划、' + backup.reviews.length + ' 份 Study 复盘、' +
     backup.academic.terms.length + ' 个学期和 ' + backup.academic.results.length + ' 项成果。' +
     (backup.timer ? '含未结算计时。' : '') + '恢复会覆盖当前浏览器的两模块数据。';
-  dialog.querySelector('[data-before]')!.addEventListener('click', () => download(before));
+  dialog.querySelector('[data-before]')!.addEventListener('click', () => {
+    try { download(before); }
+    catch (error) { dialog.querySelector('[role="alert"]')!.textContent = String(error); }
+  });
   dialog.querySelector('[data-cancel]')!.addEventListener('click', () => dialog.close());
   dialog.querySelector('[data-restore]')!.addEventListener('click', () => {
     void run(async () => {
@@ -484,8 +486,7 @@ root.addEventListener('change', event => {
     const file = control.files?.[0];
     control.value = '';
     if (file) void run(async () => {
-      if (file.size > 32 * 1024 * 1024) throw new Error('备份超过 32 MiB，无法读取。');
-      const backup = importBackup(await file.text());
+      const backup = await importBackupFile(file);
       if (confirm('恢复这份已验证的备份？它含 ' + backup.sessions.length + ' 条学习记录和 ' +
         backup.academic.terms.length + ' 个学期。损坏的原快照将保留。')) await initialize(backup);
     });

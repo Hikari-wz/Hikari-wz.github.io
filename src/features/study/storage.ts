@@ -5,11 +5,12 @@ import {
   emptyData, examStatusNames, importanceNames, masteryNames, phases, qualityFor, tracks,
   type Split, type StudyData,
 } from './model.ts';
+import { prepareStudyMigration } from './handoff.ts';
 import { daysOf, monday, validClock, validDay, validTimezone } from './time.ts';
 
 const version = 2;
 const schemaVersion = 2;
-const backupLimit = 32 * 1024 * 1024;
+export const backupLimit = 64 * 1024 * 1024;
 export const channelName = 'hikari-study-dashboard';
 const format = 'hikari-study-dashboard';
 type Envelope = { format: typeof format; version: number; data: StudyData };
@@ -103,11 +104,37 @@ function decode(input: unknown): DeskData {
   return input.data as DeskData;
 }
 
-export function exportBackup(data: StudyData) {
+function backupJson(data: StudyData) {
   return JSON.stringify({ ...serialize(data), exportedAt: new Date().toISOString() }, null, 2);
 }
+
+function checkBackupSize(size: number) {
+  if (size > backupLimit) throw new Error('备份超过 64 MiB，无法导出或恢复。');
+}
+
+export function exportBackup(data: StudyData) {
+  const text = backupJson(data);
+  checkBackupSize(new Blob([text]).size);
+  return text;
+}
+
+export function exportBackupBlob(data: StudyData) {
+  const file = new Blob([backupJson(data)], { type: 'application/json' });
+  checkBackupSize(file.size);
+  return file;
+}
+
 export function importBackup(text: string) {
-  if (text.length > backupLimit) throw new Error('备份超过 32 MiB，无法读取。');
+  checkBackupSize(new Blob([text]).size);
+  return parseBackup(text);
+}
+
+export async function importBackupFile(file: Blob) {
+  checkBackupSize(file.size);
+  return parseBackup(await file.text());
+}
+
+function parseBackup(text: string) {
   let input: unknown;
   try {
     input = JSON.parse(text);
@@ -134,6 +161,7 @@ export function requireCurrent(current: unknown, original: unknown) {
 
 export async function openStudyRepository(recovery?: DeskData): Promise<StudyRepository> {
   if (recovery) assertValid(recovery);
+  await prepareStudyMigration(channelName, schemaVersion);
   let recoveredDuringUpgrade = false;
   function recover(store: IDBObjectStore, previous: unknown, error: unknown) {
     if (!recovery || (object(previous) && typeof previous.version === 'number' && previous.version > version)) throw error;

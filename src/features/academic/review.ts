@@ -51,8 +51,8 @@ function allocationAt(inputs: Inputs, termId: string, otherId: string, at: numbe
   const term = inputs.terms.find(item => item.id === termId);
   return term ? baselineAt(inputs, term, localClock(at, inputs.settings.timezone), otherId).target : {};
 }
-function matchingBaseline(data: DeskData, proposal: Proposal, at: number) {
-  return vectorKey(allocationAt(inputsOf(data), proposal.termId, data.academic.otherId, at)) === proposal.baseline;
+function matchingBaseline(inputs: Inputs, proposal: Proposal, otherId: string, at: number) {
+  return vectorKey(allocationAt(inputs, proposal.termId, otherId, at)) === proposal.baseline;
 }
 const touched = (data: DeskData, termId: string, week: string) => data.academic.adjustments.some(item =>
   item.proposal.termId === termId && item.proposal.week === week && item.appliedAt !== null);
@@ -68,15 +68,16 @@ export function targetAt(data: DeskData, term: Term, at: number, historical = fa
 }
 
 function historicTarget(data: DeskData, term: Term, week: string) {
-  const zone = data.settings.timezone;
+  const adjustment = data.academic.adjustments.find(item => item.appliedAt !== null &&
+    item.proposal.termId === term.id && item.proposal.week === week);
+  const zone = adjustment?.proposal.config.settings.timezone ?? data.settings.timezone;
   const start = startOfDay(week, zone);
   const end = startOfDay(shiftDay(week, 7), zone);
   const points = [...new Set([
-    ...daysOf(week).map(day => startOfDay(day, zone)),
-    ...data.academic.versions.filter(item => item.at > start && item.at < end).flatMap(item => [item.at - 1, item.at]),
+    ...replayPoints(data, term.id, week, start, end - 1),
+    ...data.academic.versions.filter(item => item.at > start && item.at < end).map(item => item.at - 1),
     ...data.academic.adjustments.filter(item => item.proposal.termId === term.id && item.proposal.week === week)
       .flatMap(item => [item.appliedAt, item.endedAt]).filter((at): at is number => at !== null && at > start && at < end),
-    ...transitionPoints(data, term.id, week).filter(at => at >= start && at < end),
   ])].sort((a, b) => a - b);
   const rest = daysOf(week).filter(day => {
     const at = startOfDay(day, zone);
@@ -261,8 +262,7 @@ export function recordDecision(data: DeskData, preview: Proposal, now: number, r
   });
 }
 
-function transitionPoints(data: DeskData, termId: string, week: string) {
-  const inputs = inputsOf(data);
+function transitionPoints(inputs: Inputs, termId: string, week: string) {
   const term = inputs.terms.find(item => item.id === termId);
   const zone = inputs.settings.timezone;
   const days = daysOf(week);
@@ -271,12 +271,33 @@ function transitionPoints(data: DeskData, termId: string, week: string) {
   return [...new Set([...days.map(day => startOfDay(day, zone)), ...cutoffs])].sort((a, b) => a - b);
 }
 
+// A calendar transition is only relevant while the configuration that defines it was in force.
+function replayPoints(data: DeskData, termId: string, week: string, from: number, through: number, fallback?: Inputs) {
+  const changes = data.academic.versions.filter(version => version.at > from && version.at <= through);
+  const boundaries = [...new Set([from, ...changes.map(version => version.at), through + 1])];
+  const points = new Set([from, through]);
+  for (let index = 0; index < boundaries.length - 1; index++) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    points.add(start);
+    const inputs = configAt(data, start) ?? fallback;
+    if (inputs) {
+      for (const point of transitionPoints(inputs, termId, week)) {
+        if (point >= start && point < end) points.add(point);
+      }
+    }
+  }
+  return [...points].sort((a, b) => a - b);
+}
+
 // Read and update both call this before modifying the shared transaction's inputs.
 export function settle(data: DeskData, now: number) {
   for (const item of data.academic.adjustments) {
     const { proposal } = item;
     if (item.state === 'pending' && proposal.effectiveAt <= now) {
-      if (proposal.rule !== rules.version || !matchingBaseline(data, proposal, proposal.effectiveAt) ||
+      const effectiveInputs = configAt(data, proposal.effectiveAt) ?? proposal.config;
+      if (proposal.rule !== rules.version ||
+          !matchingBaseline(effectiveInputs, proposal, data.academic.otherId, proposal.effectiveAt) ||
           fingerprint(data, proposal.termId, proposal.inputWeek, proposal.asOf) !== proposal.fingerprint) {
         end(item, 'invalid', proposal.effectiveAt, '生效前证据或目标分配已变化，请重新预览。');
         continue;
@@ -285,10 +306,13 @@ export function settle(data: DeskData, now: number) {
       item.appliedAt = proposal.effectiveAt;
     }
     if (item.state !== 'applied') continue;
-    const endOfWeek = startOfDay(shiftDay(proposal.week, 7), data.settings.timezone);
-    const points = [...transitionPoints(data, proposal.termId, proposal.week), Math.min(now, endOfWeek - 1)].sort((a, b) => a - b);
+    const endOfWeek = startOfDay(shiftDay(proposal.week, 7), proposal.config.settings.timezone);
+    const through = Math.min(now, endOfWeek - 1);
+    if (through <= item.appliedAt!) continue;
+    const points = replayPoints(data, proposal.termId, proposal.week, item.appliedAt!, through, proposal.config);
     for (const point of points) {
-      if (point <= item.appliedAt! || point > now || matchingBaseline(data, proposal, point)) continue;
+      const inputs = configAt(data, point) ?? proposal.config;
+      if (point === item.appliedAt || matchingBaseline(inputs, proposal, data.academic.otherId, point)) continue;
       end(item, 'paused', point, '有效课程或分配基线已变化，恢复当前配置。');
       break;
     }
@@ -312,10 +336,10 @@ export function reconcileUpdate(before: DeskData, after: DeskData, now: number) 
     if (item.state === 'pending' && fingerprint(after, proposal.termId, proposal.inputWeek, proposal.asOf) !== proposal.fingerprint) {
       end(item, 'invalid', now, '确认所依据的配置、课次或成果已变化，请重新确认。');
     }
-    if (item.state === 'applied' && clockOf(after, now).day < shiftDay(proposal.week, 7)) {
+    if (item.state === 'applied' && item.appliedAt! <= now && now < startOfDay(shiftDay(proposal.week, 7), proposal.config.settings.timezone)) {
       const oldManual = oldInputs.terms.find(term => term.id === proposal.termId)?.manual;
       const manual = newInputs.terms.find(term => term.id === proposal.termId)?.manual;
-      if (JSON.stringify(oldManual) !== JSON.stringify(manual) || !matchingBaseline(after, proposal, now)) {
+      if (JSON.stringify(oldManual) !== JSON.stringify(manual) || !matchingBaseline(newInputs, proposal, after.academic.otherId, now)) {
         end(item, 'paused', now, '手动分配或有效课程已变化，恢复当前配置。');
       }
     }

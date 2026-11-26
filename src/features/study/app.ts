@@ -3,7 +3,7 @@ import {
   defaultSettings, phaseNames, phases, tracks, type Exam, type Review, type Session, type Settings, type Split, type StudyData, type Track,
 } from './model.ts';
 import { calculateBudget, timerMs } from './planning.ts';
-import { channelName, exportBackup, importBackup, openStudyRepository, requireCurrent, type StudyRepository } from './storage.ts';
+import { channelName, exportBackupBlob, importBackupFile, openStudyRepository, requireCurrent, type StudyRepository } from './storage.ts';
 import { targetsOf } from './statistics.ts';
 import { localClock, monday, shiftDay, validDay, validTimezone } from './time.ts';
 import {
@@ -153,7 +153,7 @@ function previewPlan(form: HTMLFormElement) {
 }
 
 function downloadBackup(snapshot: StudyData) {
-  const url = URL.createObjectURL(new Blob([exportBackup(snapshot)], { type: 'application/json' }));
+  const url = URL.createObjectURL(exportBackupBlob(snapshot));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = `hikari-study-${now().day}.json`;
@@ -443,14 +443,16 @@ async function action(button: HTMLButtonElement) {
 }
 
 async function handleImport(file: File) {
-  if (file.size > 32 * 1024 * 1024) throw new Error('备份超过 32 MiB，无法读取。');
-  const restored = importBackup(await file.text());
+  const restored = await importBackupFile(file);
   const before = await repository.read();
   showDialog('恢复本地备份', `<p>备份包含 ${restored.sessions.length} 条学习记录、${restored.exams.length} 场考试、${restored.plans.length} 份周计划和 ${restored.reviews.length} 份复盘。恢复后将覆盖本浏览器的 Study 和 Academic 数据（含 ${restored.academic.terms.length} 个学期）。备份中${restored.timer ? '有' : '没有'}未结算计时。可以先导出当前数据。</p>
     <div class="study-actions"><button class="study-action" type="button" data-action="backup-before">先导出当前数据</button>
     <button class="study-action danger" type="button" data-action="confirm-restore">确认覆盖并恢复</button>
     <button class="study-action" type="button" data-action="close-dialog">取消</button></div>`);
-  dialog?.querySelector('[data-action="backup-before"]')?.addEventListener('click', () => downloadBackup(before));
+  dialog?.querySelector('[data-action="backup-before"]')?.addEventListener('click', () => {
+    try { downloadBackup(before); }
+    catch (error) { report(error); }
+  });
   dialog?.querySelector('[data-action="confirm-restore"]')?.addEventListener('click', () => run(async () => {
     data = await repository.restore(before, restored);
     notify('完整备份已恢复。');
