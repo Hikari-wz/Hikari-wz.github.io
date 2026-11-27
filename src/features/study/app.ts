@@ -1,3 +1,5 @@
+import { prepareDesk } from '../desk/ui.ts';
+import { cloudEnabled } from '../desk/client.ts';
 import { inTerm, type Assessment, type DeskData } from '../academic/model.ts';
 import {
   defaultSettings, phaseNames, phases, tracks, type Exam, type Review, type Session, type Settings, type Split, type StudyData, type Track,
@@ -437,7 +439,7 @@ async function action(button: HTMLButtonElement) {
       return;
     case 'close-dialog': dialog?.close(); return;
     case 'export': downloadBackup(await repository.read()); notify('备份文件已生成。'); return;
-    case 'import': container.querySelector<HTMLInputElement>('#study-backup-file')?.click(); return;
+    case 'import': if (cloudEnabled) { location.assign('/desk/data/'); return; } container.querySelector<HTMLInputElement>('#study-backup-file')?.click(); return;
     case 'reset-ratios':
       if (!confirm('恢复五个学习阶段的默认比例和 10% 机动时间？已保存的周预算继续使用原快照。')) return;
       await commit(state => {
@@ -541,6 +543,7 @@ async function action(button: HTMLButtonElement) {
 }
 
 async function handleImport(file: File) {
+  if (cloudEnabled) { location.assign('/desk/data/'); return; }
   const restored = await importBackupFile(file);
   const before = await repository.read();
   showDialog('恢复本地备份', `<p>备份包含 ${restored.sessions.length} 条学习记录、${restored.exams.length} 场考试、${restored.plans.length} 份周计划和 ${restored.reviews.length} 份复盘。恢复后将覆盖本浏览器的 Study 和 Academic 数据（含 ${restored.academic.terms.length} 个学期）。备份中${restored.timer ? '有' : '没有'}未结算计时。可以先导出当前数据。</p>
@@ -700,6 +703,7 @@ async function refresh() {
 }
 
 try {
+  await prepareDesk(container, content);
   repository = await openStudyRepository();
   data = await repository.read();
   if (typeof BroadcastChannel === 'function') {
@@ -716,6 +720,8 @@ try {
       void refresh().catch(report);
     }
   }, 1000);
+  setInterval(() => { if (cloudEnabled && !document.hidden) void refresh().catch(report); }, 30_000);
+  window.addEventListener('online', () => void refresh().catch(report));
   render();
   const showSchedule = () => {
     if (location.hash === '#study-exams') updateView('plan', 'study-exams');
@@ -736,7 +742,7 @@ try {
     render();
   } else {
     content.setAttribute('aria-busy', 'false');
-    content.textContent = '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。如需从备份恢复，请打开学业中心。';
+    content.textContent = cloudEnabled ? '暂时无法读取云端数据，请检查登录、网络或打开数据中心。原始旧数据会保留。' : '暂时无法打开本地数据库。请检查浏览器存储权限，关闭其他工作台窗口后刷新。如需从备份恢复，请打开学业中心。';
   }
 }
 

@@ -24,7 +24,7 @@ export default function studyPwa() {
           hash.update(path).update(bytes);
           // Vite can put a shared static import in a separate hashed chunk.
           if (path.startsWith('/_astro/') && path.endsWith('.js')) {
-            for (const dependency of bytes.toString().matchAll(/\b(?:from\s*|import\s*\(?)["']\.\/([\w.-]+\.js)["']/g)) {
+            for (const dependency of bytes.toString().matchAll(/\b(?:from\s*|import\s*\(?)["'`]\.\/([\w.-]+\.js)["'`]/g)) {
               paths.add('/_astro/' + dependency[1]);
             }
           }

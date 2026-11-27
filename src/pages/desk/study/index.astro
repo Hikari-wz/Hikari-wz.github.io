@@ -11,7 +11,7 @@ const sections = [
   { id: 'policy', label: '制度', icon: 'book' },
 ] as const;
 ---
-<Site title="学习工作台" description="每周学习预算、考试安排与记录，保存在当前设备。" viewportFit>
+<Site title="学习工作台" description={import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud' ? '每周学习预算、考试安排与记录，登录后跨设备共享。' : '每周学习预算、考试安排与记录，保存在当前设备。'} viewportFit>
   <Fragment slot="head">
     <link rel="manifest" href="/desk/study/app.webmanifest" />
     <link rel="apple-touch-icon" href="/desk/study/icon-180.png" />
@@ -32,8 +32,8 @@ const sections = [
     </nav>
     <div class="study-status" id="study-status" role="status"></div>
     <div class="study-status" id="study-pwa" role="status" hidden></div>
-    <div id="study-content" aria-busy="true" tabindex="-1"><p>正在打开本地学习工作台…</p></div>
-    <noscript><p>请启用 JavaScript，以便在设备上保存和读取学习数据。</p></noscript>
+    <div id="study-content" aria-busy="true" tabindex="-1"><p>正在打开学习工作台…</p></div>
+    <noscript><p>请启用 JavaScript，以便保存和读取学习数据。</p></noscript>
     <Policy />
   </div>
 </Site>

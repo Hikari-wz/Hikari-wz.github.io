@@ -10,7 +10,7 @@ import '@/styles/sections.css';
     <section>
       <Icon name="plan" size={23} />
       <h2>学习工作台</h2>
-      <p>分配一周的学习时间、记录投入，并回顾真正掌握的知识与完成的项目。记录保存在当前设备的浏览器中。</p>
+      <p>分配一周的学习时间、记录投入，并回顾真正掌握的知识与完成的项目。{import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud' ? '登录后在不同设备共享学习数据。' : '记录保存在当前设备的浏览器中。'}</p>
       <a class="button" href="/desk/study/">打开学习工作台</a>
     </section>
     <section>
@@ -21,6 +21,7 @@ import '@/styles/sections.css';
     </section>
     <section><Icon name="check" size={23} /><h2>每日待办</h2><p>规划中</p></section>
   </div>
+  {import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud' && <p><a href="/desk/data/">数据中心 · 登录、迁移与备份</a></p>}
 </Site>
 <style>
   h2 { font: 600 1.4rem var(--serif); }

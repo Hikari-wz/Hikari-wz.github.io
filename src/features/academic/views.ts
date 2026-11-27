@@ -1,3 +1,4 @@
+import { cloudEnabled } from '../desk/client.ts';
 import { escape as e, options, subjectName } from '../study/views.ts';
 import { duration, localClock, monday, shiftDay } from '../study/time.ts';
 import { apportion, baselineAt, recentExam, recommend, scheduleOf, stageAt, stageNames, weeklyAllocation } from './allocation.ts';
@@ -305,7 +306,7 @@ export function settings(data: DeskData, term: Term | undefined, now: number) {
         [item.id, item.day + ' · ' + duration(item.minutes)])) }) +
         select('subjectId', '目标课程', { '': '请选择', ...destinations }) +
         '<p>保存前会确认原科目、新科目、日期和时长。</p>')) : '') +
-    card('本地备份', '<p>Study 和 Academic 共用当前站点、同一浏览器存储分区的记录。备份包含隐私数据，可主动转移到另一设备。此浏览器及同源脚本可访问这些数据。</p>' +
+    card(cloudEnabled ? '数据与备份' : '本地备份', (cloudEnabled ? '<p>Study 与 Academic 共用 Supabase 数据。迁移、合并与完整云端备份请打开数据中心。导出的备份包含隐私数据，请妥善保存。</p>' : '<p>Study 和 Academic 共用当前站点、同一浏览器存储分区的记录。备份包含隐私数据，可主动转移到另一设备。此浏览器及同源脚本可访问这些数据。</p>') +
       '<div class="study-actions">' + button('导出完整 JSON', 'export') + button('选择备份恢复', 'import') +
       '</div><input type="file" accept=".json,application/json" data-backup-file hidden>');
 }

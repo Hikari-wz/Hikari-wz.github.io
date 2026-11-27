@@ -1,0 +1,32 @@
+---
+import Site from '@/layouts/Site.astro';
+import '@/features/study/study.css';
+---
+<Site title="数据中心" description="私人学习数据的登录、迁移、同步与备份。" viewportFit>
+  <div class="study" id="desk-data">
+    <header class="study-header"><div><a href="/desk/">Desk</a><h1>数据中心</h1></div></header>
+    <section class="study-card" id="legacy"><h2>保留旧数据</h2>
+      <p>每个浏览器和主屏幕 App 的存储相互隔离。请分别在原环境导出，再在此逐份导入。原始数据不会自动删除。</p>
+      <button class="study-action" type="button" data-raw>导出当前浏览器原始旧数据</button>
+      <p role="status" data-raw-status></p>
+    </section>
+    <div data-content>
+      <section class="study-card"><h2>备份与迁移</h2>
+        <p>先保存各来源原始备份，再选择文件预览。支持旧 v1/v2 备份、原始备份和云端备份。遇到冲突须逐项选择。</p>
+        <label class="study-field">选择一个来源<input type="file" accept="application/json,.json" data-source /></label>
+        <div data-preview></div>
+        <div class="study-actions">
+          <button class="study-action" type="button" data-cloud-export>导出完整云端备份</button>
+          <button class="study-action" type="button" data-outbox>导出缓存与待同步队列</button>
+          <button class="study-action" type="button" data-retry>重试同步</button>
+        </div>
+        <details><summary>处理被阻止的待同步操作</summary><p>先导出缓存与待同步队列，再放弃本设备的待同步修改。随后可把导出文件作为来源合并，逐项处理冲突。</p>
+          <button class="study-action danger" type="button" data-discard>导出并放弃待同步修改</button>
+        </details>
+        <p role="status" data-message></p>
+      </section>
+      <p><a href="/desk/study/">学习工作台</a> · <a href="/desk/academic/">学业中心</a></p>
+    </div>
+  </div>
+</Site>
+<script>import '@/features/desk/data-app.ts';</script>
