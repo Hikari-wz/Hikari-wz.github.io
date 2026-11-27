@@ -64,8 +64,10 @@ function updateView(target: View, section?: string) {
 
 function assessmentFields(form: HTMLFormElement) {
   const fields = new FormData(form);
-  const official = fields.get('kind') === 'exam' && fields.get('certainty') === 'confirmed';
-  form.querySelector<HTMLElement>('[data-official-fields]')!.hidden = !official;
+  const official = form.dataset.form === 'exam' ? fields.get('certainty') === 'confirmed' :
+    fields.get('kind') === 'exam' && fields.get('certainty') === 'confirmed';
+  const officialFields = form.querySelector<HTMLElement>('[data-official-fields]');
+  if (officialFields) officialFields.hidden = !official;
   const date = form.elements.namedItem('day') as HTMLInputElement;
   date.disabled = fields.get('certainty') === 'unknown';
   date.required = !date.disabled;
@@ -107,7 +109,7 @@ function render() {
     case 'review': markup = reviewView(data, time, reviewWeek || current); break;
   }
   content.innerHTML = markup;
-  content.querySelectorAll<HTMLFormElement>('form[data-form="assessment"]').forEach(assessmentFields);
+  content.querySelectorAll<HTMLFormElement>('form[data-form="assessment"], form[data-form="exam"]').forEach(assessmentFields);
   content.setAttribute('aria-busy', 'false');
   for (const item of content.querySelectorAll<HTMLDetailsElement>('details[data-keep]')) {
     if (open.includes(item.dataset.keep)) item.open = true;
@@ -255,6 +257,9 @@ async function saveForm(form: HTMLFormElement) {
         break;
       }
       case 'exam': {
+        const certainty = (text('certainty') || 'confirmed') as Assessment['certainty'];
+        const demote = certainty !== 'confirmed';
+        if (demote && !confirm('改为暂定或未定后，这场考试会退出 Study 的自动阶段与预算试算。继续？')) return;
         const exam: Exam = {
           id: key || crypto.randomUUID(), name: text('name'), subjectId: text('subjectId'), day: text('day'),
           start: text('start'), end: text('end'), importance: text('importance') as Exam['importance'],
@@ -265,26 +270,33 @@ async function saveForm(form: HTMLFormElement) {
           const previous = state.exams.find(item => item.id === key);
           if (key) requireCurrent(previous, data.exams.find(item => item.id === key));
           if (exam.status === 'completed') exam.closedAt = previous?.closedAt ?? Date.now();
-          replace(state.exams, item => item.id === exam.id, exam);
           const original = data.academic.assessments.find(item => item.examId === key);
           const metadata = state.academic.assessments.find(item => item.examId === key);
           requireCurrent(metadata, original);
           const prepare = text('prepare');
           const required = fields.has('required');
-          if (metadata || prepare || required) {
-            const term = state.academic.terms.find(item => inTerm(exam.day, item) && (!item.archived || item.id === metadata?.termId));
-            if (!term || !state.subjects.some(item => item.id === exam.subjectId && item.track === 'school')) {
-              if (prepare || required) throw new Error('准备窗口和必需考核需要对应一个学期内的校内科目。');
-              return;
-            }
+          const school = state.subjects.some(item => item.id === exam.subjectId && item.track === 'school');
+          const term = state.academic.terms.find(item => inTerm(exam.day || previous?.day || '', item) &&
+            (!item.archived || item.id === metadata?.termId || demote));
+          if (demote && (!previous || !term || !school)) {
+            throw new Error('请为校内考试选择所属学期内的日期，或先建立学期。');
+          }
+          if ((prepare || required) && (!term || !school)) throw new Error('准备窗口和必需考核需要对应一个学期内的校内科目。');
+          if (demote) state.exams = state.exams.filter(item => item.id !== exam.id);
+          else replace(state.exams, item => item.id === exam.id, exam);
+          if (term && school && (demote || metadata || prepare || required)) {
             const assessment: Assessment = {
-              id: metadata?.id ?? exam.id, examId: exam.id, termId: term.id, subjectId: exam.subjectId,
-              kind: 'exam', certainty: 'confirmed', title: exam.name, status: exam.status, day: exam.day,
+              id: metadata?.id ?? exam.id, examId: demote ? '' : exam.id, termId: term.id, subjectId: exam.subjectId,
+              kind: 'exam', certainty, title: exam.name, status: exam.status, day: exam.day,
               time: exam.end, prepare, required,
             };
+            if (demote) {
+              const { id, start, importance, mastery, note, closedAt } = exam;
+              assessment.examDraft = { id, start, importance, mastery, note, ...(closedAt !== undefined ? { closedAt } : {}) };
+            }
             replace(state.academic.assessments, item => item.id === assessment.id, assessment);
           }
-        }, '考试已保存，当前阶段已重新计算。');
+        }, demote ? '考核已更新，当前阶段已重新计算。' : '考试已保存，当前阶段已重新计算。');
         examId = '';
         break;
       }
@@ -301,14 +313,20 @@ async function saveForm(form: HTMLFormElement) {
           const original = state.academic.assessments.find(item => item.id === key);
           requireCurrent(original, data.academic.assessments.find(item => item.id === key));
           if (key && (!original || original.examId)) throw new Error('事项已变更，请重新打开日程。');
+          const draft = original?.examDraft;
           if (formal) {
-            if (state.exams.some(item => item.id === row.id)) throw new Error('此事项已关联正式考试。');
-            row.examId = row.id;
+            const examKey = draft?.id ?? row.id;
+            if (state.exams.some(item => item.id === examKey)) throw new Error('此事项已关联正式考试。');
+            const start = text('start');
+            if (start && row.time && start >= row.time) throw new Error('考试结束时间必须晚于开始时间。');
+            row.examId = examKey;
             state.exams.push({
-              id: row.id, subjectId: row.subjectId, name: row.title, day: row.day, start: '', end: row.time,
-              importance: text('importance') as Exam['importance'], mastery: 'new', status: row.status, note: '',
-              ...(row.status === 'completed' ? { closedAt: Date.now() } : {}),
+              id: examKey, subjectId: row.subjectId, name: row.title, day: row.day, start, end: row.time,
+              importance: text('importance') as Exam['importance'], mastery: draft?.mastery ?? 'new', status: row.status, note: draft?.note ?? '',
+              ...(row.status === 'completed' ? { closedAt: draft?.closedAt ?? Date.now() } : {}),
             });
+          } else if (row.kind === 'exam' && draft) {
+            row.examDraft = draft;
           }
           replace(state.academic.assessments, item => item.id === row.id, row);
         }, '考核或任务已保存。');
@@ -612,7 +630,7 @@ container.addEventListener('change', event => {
   }
   const form = control.form;
   if (!form || (!data && !legacySnapshot)) return;
-  if (form.dataset.form === 'assessment' && ['certainty', 'kind'].includes(control.name)) assessmentFields(form);
+  if (['assessment', 'exam'].includes(form.dataset.form ?? '') && ['certainty', 'kind'].includes(control.name)) assessmentFields(form);
   if (form.dataset.form === 'filter') {
     const fields = new FormData(form);
     filters = { week: read(fields, 'week'), track: read(fields, 'track'),

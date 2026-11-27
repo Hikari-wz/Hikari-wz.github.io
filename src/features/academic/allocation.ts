@@ -25,8 +25,9 @@ export function scheduleOf(inputs: Inputs, term: Term) {
   const assessments = inputs.assessments.filter(item => item.termId === term.id);
   const details = new Map(assessments.filter(item => item.examId).map(item => [item.examId, item]));
   return [
-    ...assessments.filter(item => !item.examId).map(item => ({
+    ...assessments.filter(item => !item.examId).map(({ examDraft, ...item }) => ({
       ...item,
+      id: examDraft?.id ?? item.id,
       cutoff: item.time ? clockMinute(item.time) : untimedCutoff(inputs.settings),
       formal: false,
     })),

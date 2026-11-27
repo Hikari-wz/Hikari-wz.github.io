@@ -8,16 +8,23 @@ import { chromium, devices } from 'playwright-core';
 import ts from 'typescript';
 import { comparable } from '../src/features/academic/review.ts';
 import { migrateStudy } from '../src/features/academic/model.ts';
-import { backupLimit, exportBackup, exportBackupBlob } from '../src/features/study/storage.ts';
+import { backupLimit, exportBackup, exportBackupBlob, importBackup } from '../src/features/study/storage.ts';
 import { instant, largeBackupData, legacy, mondayAt, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
 
 const study = '/desk/study/';
 const academic = '/desk/academic/';
-const variants = process.env.ACADEMIC_LEGACY_DIST ? ['current', 'legacy'] : ['current'];
-const dist = { current: resolve('dist'), legacy: resolve(process.env.ACADEMIC_LEGACY_DIST ?? 'dist') };
+const variants = ['current'];
+if (process.env.ACADEMIC_LEGACY_DIST) variants.push('legacy');
+if (process.env.ACADEMIC_PRE_MOBILE_DIST) variants.push('preMobile');
+const dist = {
+  current: resolve('dist'),
+  legacy: resolve(process.env.ACADEMIC_LEGACY_DIST ?? 'dist'),
+  preMobile: resolve(process.env.ACADEMIC_PRE_MOBILE_DIST ?? 'dist'),
+};
 const mime = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json',
   webmanifest: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png' };
 let legacyShell = false;
+let preMobileAcademic = false;
 let blockWorkerUpdate = false;
 const workerPath = study + 'sw.js';
 const server = createServer(async (request, response) => {
@@ -32,7 +39,8 @@ const server = createServer(async (request, response) => {
     const file = path.endsWith('/') ? path + 'index.html' : path;
     if (!/^\/[\w./-]+$/.test(file) || file.includes('..')) return response.writeHead(400).end();
     if (path === workerPath && blockWorkerUpdate) return response.writeHead(503).end();
-    const order = legacyShell && (path === study || path === workerPath) ? ['legacy', 'current'] : variants;
+    const order = preMobileAcademic && path === academic ? ['preMobile'] :
+      legacyShell && (path === study || path === workerPath) ? ['legacy', 'current'] : variants;
     for (const version of order) {
       try {
         const bytes = await readFile(dist[version] + file);
@@ -509,6 +517,120 @@ try {
     await ctx.close();
   }
   console.log('T08/T09/T14 compiled forms: task priority, shared exam, paper index lifecycle, stable rename and archived review.');
+
+  // A v2 backup from before the move had distinct Study exam and Academic assessment IDs.
+  {
+    const ctx = await browser.newContext(contextOptions);
+    const academicPage = await ctx.newPage();
+    const studyPage = await ctx.newPage();
+    for (const page of [academicPage, studyPage]) await at(page, sunday);
+    const { data, term } = sundayFixture();
+    const exam = Object.assign(data.exams[0], {
+      day: '2027-01-05', start: '09:00', end: '11:00', importance: 'important', mastery: 'skilled', note: '合成原考试备注',
+    });
+    const association = {
+      id: 'original-assessment', examId: exam.id, termId: term.id, subjectId: exam.subjectId,
+      kind: 'exam', certainty: 'confirmed', title: exam.name, status: exam.status,
+      day: exam.day, time: exam.end, prepare: '2027-01-02', required: true,
+    };
+    data.academic.assessments.push(association);
+    term.courses.find(course => course.subjectId === exam.subjectId).checklist = [exam.id];
+
+    let backup = exportBackup(data);
+    if (process.env.ACADEMIC_PRE_MOBILE_DIST) {
+      const old = await browser.newContext(contextOptions);
+      try {
+        const page = await old.newPage();
+        await at(page, sunday);
+        await seed(page, data);
+        preMobileAcademic = true;
+        await page.goto(academic);
+        await button(page.getByRole('navigation'), '设置').click();
+        const downloaded = page.waitForEvent('download');
+        await button(page, '导出完整 JSON').click();
+        backup = await readFile(await (await downloaded).path(), 'utf8');
+        assert.deepEqual(JSON.parse(backup).data, data);
+      } finally {
+        preMobileAcademic = false;
+        await old.close();
+      }
+    }
+
+    await academicPage.goto(academic);
+    await nav(academicPage, '设置');
+    await pickFile(academicPage, '[data-backup-file]', backup);
+    await button(academicPage, '确认覆盖并恢复').click();
+    await readStatus(academicPage, '完整备份已恢复');
+    const href = await academicPage.getByRole('link', { name: '查看考试与任务' }).getAttribute('href');
+    await studyPage.goto(href);
+    const phase = studyPage.locator('[data-stage-name]');
+    const preview = async () => {
+      await form(studyPage, 'plan').getByLabel('使用自定目标').uncheck();
+      return studyPage.locator('#study-budget-preview').innerText();
+    };
+    await phase.filter({ hasText: '考前冲刺期' }).waitFor();
+    const formalBudget = await preview();
+    let withoutExam;
+    for (const [certainty, label, prepare] of [
+      ['tentative', '暂定', '2027-01-01'],
+      ['unknown', '未定', '2027-01-03'],
+    ]) {
+      await button(studyPage.locator('#study-exams li').filter({ hasText: exam.note }), '编辑').click();
+      const editor = form(studyPage, 'exam');
+      const dateState = editor.getByLabel('日期状态');
+      assert.equal(await dateState.inputValue(), 'confirmed');
+      await dateState.selectOption(certainty);
+      assert.equal(await editor.getByLabel('考试日期').isDisabled(), certainty === 'unknown');
+      assert.equal(await editor.getByLabel('必需考核').isChecked(), true);
+      studyPage.once('dialog', dialog => void dialog.accept());
+      await button(editor, '保存修改').click();
+      await studyStatus(studyPage, '考核已更新');
+      await phase.filter({ hasText: '常规学习期' }).waitFor();
+      const provisionalBudget = await preview();
+      assert.notEqual(provisionalBudget, formalBudget);
+      if (withoutExam !== undefined) assert.equal(provisionalBudget, withoutExam);
+      withoutExam = provisionalBudget;
+      await academicPage.getByRole('heading', { name: '最近考核' }).waitFor();
+      assert.equal(await academicPage.locator('.academic-progress li').filter({ hasText: '中国近代史' }).count(), 0);
+      const provisional = (await raw(studyPage)).payload.data;
+      assert.deepEqual(provisional.exams, []);
+      assert.equal(provisional.academic.assessments.length, 1);
+      const saved = provisional.academic.assessments[0];
+      assert.equal(saved.id, association.id);
+      assert.equal(saved.termId, term.id);
+      assert.equal(saved.subjectId, exam.subjectId);
+      assert.equal(saved.examId, '');
+      assert.equal(saved.certainty, certainty);
+      assert.equal(saved.day, certainty === 'unknown' ? '' : exam.day);
+      assert.equal(saved.required, true);
+      assert.equal(saved.examDraft.id, exam.id);
+      assert.deepEqual(provisional.academic.terms[0].courses.find(course => course.subjectId === exam.subjectId).checklist, [exam.id]);
+      assert.deepEqual(provisional.plans, data.plans);
+      assert.deepEqual(importBackup(exportBackup(provisional)), provisional);
+
+      const row = studyPage.locator('[data-keep="due-original-assessment"]');
+      await row.locator('summary').filter({ hasText: label }).click();
+      await row.getByLabel('准备开始日（可选）').fill(prepare);
+      await row.getByLabel('日期状态').selectOption('confirmed');
+      if (certainty === 'unknown') await row.getByLabel('截止日或考试日').fill(exam.day);
+      assert.equal(await row.getByLabel('开始时间（可选）').inputValue(), exam.start);
+      assert.equal(await row.getByLabel('正式考试重要程度').inputValue(), exam.importance);
+      studyPage.once('dialog', dialog => void dialog.accept());
+      await button(row, '保存事项').click();
+      await studyStatus(studyPage, '考核或任务已保存');
+      await phase.filter({ hasText: '考前冲刺期' }).waitFor();
+      assert.equal(await preview(), formalBudget);
+      await academicPage.getByRole('heading', { name: '急项' }).waitFor();
+      await academicPage.locator('.academic-progress li').filter({ hasText: '中国近代史' }).waitFor();
+      const restored = (await raw(studyPage)).payload.data;
+      assert.deepEqual(restored.exams, [exam]);
+      assert.deepEqual(restored.plans, data.plans);
+      assert.deepEqual(restored.academic.assessments, [{ ...association, prepare }]);
+      assert.deepEqual(restored.academic.terms[0].courses.find(course => course.subjectId === exam.subjectId).checklist, [exam.id]);
+    }
+    await ctx.close();
+    console.log('Review P1: confirmed → tentative/unknown → confirmed preserves both IDs, required link, preparation edits and Study-only formal budget effects.');
+  }
 
   // T03/T04: held connection, aborted upgrade, broken envelope, stale restore and scope isolation.
   {

@@ -1,4 +1,4 @@
-import { currentTerm, type Assessment, type DeskData } from '../academic/model.ts';
+import { currentTerm, inTerm, type Assessment, type DeskData } from '../academic/model.ts';
 import {
   examStatusNames, importanceNames, masteryNames, phases, phaseNames, qualityFor, tracks, trackNames,
   type Exam, type Review, type Session, type Split, type StudyData, type Subject, type Track, type WeeklyPlan,
@@ -135,21 +135,27 @@ function examEntry(data: StudyData, exam: Exam, ended: boolean) {
     ] : []), button('删除', 'delete-exam', 'danger', exam.id))}`;
 }
 
+const assessmentCertainty = { confirmed: '确定', tentative: '暂定', unknown: '未定' };
+
 export function examForm(data: DeskData, now: LocalTime, exam?: Exam) {
   const subjects = data.subjects.filter(subject => !subject.archived || subject.id === exam?.subjectId);
   const metadata = data.academic.assessments.find(item => item.examId === exam?.id);
+  const canChangeDateState = exam && data.subjects.some(subject => subject.track === 'school' && subject.id === exam.subjectId) &&
+    (metadata || data.academic.terms.some(term => inTerm(exam.day, term)));
   return form('exam', fields(
     textInput('考试名称', 'name', exam?.name, true),
     select('对应科目', 'subjectId', option('', '选择科目', exam?.subjectId ?? '') + tracks.map(track =>
       `<optgroup label="${trackNames[track]}">${subjects.filter(subject => subject.track === track).map(subject =>
         option(subject.id, subject.name, exam?.subjectId ?? '')).join('')}</optgroup>`).join(''), true),
+    ...(canChangeDateState ? [select('日期状态', 'certainty', options(assessmentCertainty, 'confirmed'))] : []),
     dateInput('考试日期', 'day', exam?.day ?? now.day),
     select('重要程度', 'importance', options(importanceNames, exam?.importance ?? 'important')),
     input('开始时间（可选）', 'start', exam?.start ?? '', 'type="time"'),
     input('结束时间（可选）', 'end', exam?.end ?? '', 'type="time"'),
     select('掌握程度', 'mastery', options(masteryNames, exam?.mastery ?? 'new')),
     select('考试状态', 'status', options(examStatusNames, exam?.status ?? 'scheduled')),
-  ) + (data.academic.terms.length ? `<details ${metadata?.required || metadata?.prepare ? 'open' : ''}>
+  ) + (canChangeDateState ? muted('暂定或未定的考试保留在日程中，确定后才参与 Study 阶段与预算试算。') : '') +
+  (data.academic.terms.length ? `<details ${metadata?.required || metadata?.prepare ? 'open' : ''}>
     <summary>学业中心考核选项</summary>${dateInput('准备开始日（可选）', 'prepare', metadata?.prepare ?? '', '9998-12-31', false)}
     <label class="study-check"><input name="required" type="checkbox"${metadata?.required ? ' checked' : ''}>必需考核</label></details>` : '') + actions(submit(exam ? '保存修改' : '添加考试'),
     ...(exam ? [button('取消编辑', 'exams')] : [])), exam?.id);
@@ -164,7 +170,6 @@ export function allocationText(day: WeeklyPlan['budget']['days'][number]) {
     `${phaseNames[part.phase]}${day.parts.length > 1 ? ` ${part.minutes} 分` : ''}`).join(' · ') || phaseNames[day.parts[0].phase];
 }
 const assessmentKinds = { exam: '考试', assignment: '作业', online: '线上学习', oral: '口语', diagnostic: '摸底', preparation: '准备' };
-const assessmentCertainty = { confirmed: '确定', tentative: '暂定', unknown: '未定' };
 const assessmentStatus = { scheduled: '待处理', completed: '已完成', cancelled: '已取消' };
 
 function assessmentForm(data: DeskData, item?: Assessment) {
@@ -182,7 +187,8 @@ function assessmentForm(data: DeskData, item?: Assessment) {
     input('截止时刻（可选）', 'time', item?.time ?? '', 'type="time"'),
     dateInput('准备开始日（可选）', 'prepare', item?.prepare ?? '', '9998-12-31', false),
     `<label class="study-check"><input name="required" type="checkbox"${item?.required ? ' checked' : ''}>必需考核</label>`,
-  ) + `<div data-official-fields hidden>${select('正式考试重要程度', 'importance', options(importanceNames, 'normal'))}
+  ) + `<div data-official-fields hidden>${input('开始时间（可选）', 'start', item?.examDraft?.start ?? '', 'type="time"')}
+    ${select('正式考试重要程度', 'importance', options(importanceNames, item?.examDraft?.importance ?? 'normal'))}
     ${muted('确定的考试计入 Study 的阶段与预算试算。')}</div>` +
     actions(submit(item ? '保存事项' : '添加事项')), item?.id);
 }

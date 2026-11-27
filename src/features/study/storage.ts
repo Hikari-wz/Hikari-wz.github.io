@@ -1,4 +1,4 @@
-import { migrateStudy, type DeskData } from '../academic/model.ts';
+import { assessmentScheduleId, migrateStudy, type DeskData } from '../academic/model.ts';
 import { reconcileUpdate, settle } from '../academic/review.ts';
 import { validAcademic } from '../academic/validation.ts';
 import {
@@ -352,9 +352,10 @@ function reconcileReferences(before: DeskData, data: DeskData) {
     for (const course of term.courses) {
       const old = before.academic.terms.find(item => item.id === term.id)?.courses.find(item => item.subjectId === course.subjectId);
       if (!course.checklist || !old?.checklist) continue;
+      // A change in date certainty preserves membership. Completion still requires a confirmed assessment.
       const signature = (state: DeskData) => state.academic.assessments.filter(item => item.termId === term.id &&
         item.subjectId === course.subjectId && item.required).map(item =>
-        [item.id, item.examId, item.status === 'cancelled', item.certainty]).sort();
+        [assessmentScheduleId(item), item.status === 'cancelled']).sort();
       if (!same(signature(before), signature(data))) course.checklist = null;
     }
   }

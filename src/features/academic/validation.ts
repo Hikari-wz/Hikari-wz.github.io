@@ -1,5 +1,5 @@
 import { monday, validClock, validDay } from '../study/time.ts';
-import type { StudyData } from '../study/model.ts';
+import { importanceNames, masteryNames, type StudyData } from '../study/model.ts';
 import { attempts, conditions, materialStates, metrics, modes, reserveId, stages, states } from './model.ts';
 
 type Row = Record<string, unknown>;
@@ -68,7 +68,19 @@ export function validAcademic(value: unknown, data: StudyData, validStudy: (valu
       (item.certainty === 'unknown' ? item.day === '' : date(item.day)) && bool(item.required) &&
       (item.examId === '' || (item.kind === 'exam' && item.certainty === 'confirmed' &&
         exams.some(exam => exam.id === item.examId && exam.subjectId === item.subjectId))) &&
-      !(item.kind === 'exam' && item.certainty === 'confirmed' && !item.examId))) return false;
+      !(item.kind === 'exam' && item.certainty === 'confirmed' && !item.examId) &&
+      (item.examDraft === undefined || object(item.examDraft) && item.kind === 'exam' && !item.examId &&
+        key(item.examDraft.id) && time(item.examDraft.start) && choice(item.examDraft.importance, Object.keys(importanceNames)) &&
+        choice(item.examDraft.mastery, Object.keys(masteryNames)) && text(item.examDraft.note) &&
+        (item.examDraft.closedAt === undefined || stamp(item.examDraft.closedAt))))) return false;
+    const reserved = new Set(exams.map(exam => exam.id));
+    const assessmentIds = new Set(items.map(item => item.id));
+    for (const item of items) {
+      if (!object(item.examDraft)) continue;
+      const id = String(item.examDraft.id);
+      if (reserved.has(id) || id !== item.id && assessmentIds.has(id)) return false;
+      reserved.add(id);
+    }
     const linked = items.filter(item => item.examId);
     return unique(linked, 'examId') && !items.some(item => !item.examId && exams.some(exam => exam.id === item.id));
   }
