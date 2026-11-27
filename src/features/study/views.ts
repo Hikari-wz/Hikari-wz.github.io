@@ -1,3 +1,4 @@
+import { cloudEnabled } from '../desk/client.ts';
 import { currentTerm, inTerm, type Assessment, type DeskData } from '../academic/model.ts';
 import {
   examStatusNames, importanceNames, masteryNames, phases, phaseNames, qualityFor, tracks, trackNames,
@@ -370,7 +371,7 @@ export function recordsView(data: StudyData, now: LocalTime, filter: RecordFilte
       ${actions(button(timer.runningSince === null ? '继续' : '暂停', timer.runningSince === null ? 'resume-timer' : 'pause-timer', '', timer.id),
         button('结束并保存', 'finish', 'primary', timer.id), button('放弃', 'discard-timer', 'danger', timer.id))}`
     : form('timer', subjectFields(data) + actions(submit('开始计时')))}
-    ${muted('休息、上课与等待 AI 时可以暂停。计时状态会保存在此设备。')}</section>`;
+    ${muted(cloudEnabled ? '休息、上课与等待 AI 时可以暂停。计时状态会同步到同一账号，离线时暂存在此设备等待同步。' : '休息、上课与等待 AI 时可以暂停。计时状态会保存在此设备。')}</section>`;
   const quick = `<section class="study-card" id="study-record" tabindex="-1"><h2>${editing ? '编辑学习记录' : '快速补录'}</h2>
     ${sessionForm(data, now, editing)}</section>`;
   const week = monday(now.day);
@@ -437,8 +438,8 @@ export function settingsView(data: StudyData) {
     <label class="study-check"><input type="checkbox" name="vacation"${settings.vacation ? ' checked' : ''}>开启寒暑假模式</label>` +
     muted('如只录入考试开始时间，阶段至少持续到开始后 1 分钟。每个阶段的三类比例合计须为 100%。') +
     ratioInputs + actions(submit('保存设置'), button('恢复默认比例与机动时间', 'reset-ratios'))));
-  const backups = card('本地数据与备份', `<p>数据保存在此设备上当前浏览器的 IndexedDB。不同设备、浏览器及主屏幕应用可能各有一份数据。删除网页 App 或清理网站数据可能丢失记录。</p>
-    <p>可定期导出完整 JSON 至 iCloud Drive。恢复备份会替换当前设备的数据，包括进行中的计时。文件只在本机读取。</p>
+  const backups = card(cloudEnabled ? '数据与备份' : '本地数据与备份', `<p>${cloudEnabled ? 'Supabase 保存统一数据。此设备保留缓存与待同步队列；清理网站数据前请确认同步完成。迁移和完整云端备份请打开数据中心。' : '数据保存在此设备上当前浏览器的 IndexedDB。不同设备、浏览器及主屏幕应用可能各有一份数据。删除网页 App 或清理网站数据可能丢失记录。'}</p>
+    <p>${cloudEnabled ? '可导出当前可见数据的 JSON。完整云端备份及合并恢复请使用数据中心；本地待同步内容须另外保留。' : '可定期导出完整 JSON 至 iCloud Drive。恢复备份会替换当前设备的数据，包括进行中的计时。文件只在本机读取。'}</p>
     ${actions(button('导出 JSON', 'export', 'primary'), button('选择备份恢复', 'import'))}
     <input type="file" id="study-backup-file" aria-label="选择备份文件" accept=".json,application/json" hidden>
     <details><summary>添加到 iPhone 主屏幕</summary><p>在 Safari 打开学习工作台，点分享，再选择「添加到主屏幕」。若看到「作为网页 App 打开」，开启后再添加。从主屏幕图标打开后保持在线，等待离线准备完成。</p></details>`);

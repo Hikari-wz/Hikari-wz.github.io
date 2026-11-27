@@ -194,6 +194,10 @@ export function readLegacyStudy(): Promise<StudyData> {
 }
 
 export async function openStudyRepository(recovery?: DeskData): Promise<StudyRepository> {
+  if (import.meta.env?.PUBLIC_DESK_DATA_MODE === 'cloud') {
+    if (recovery) throw new Error('云端模式请使用数据中心的合并入口。');
+    return (await import('../desk/repository.ts')).openCloudRepository();
+  }
   if (recovery) assertValid(recovery);
   await prepareStudyMigration(channelName, schemaVersion);
   let recoveredDuringUpgrade = false;
@@ -324,11 +328,11 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
   };
 }
 
-function assertValid(data: DeskData) {
+export function assertValid(data: DeskData) {
   if (!validData(data) || !validAcademic(data.academic, data, validData)) throw new Error('数据无效，请检查日期、范围及关联。');
 }
 
-function reconcileReferences(before: DeskData, data: DeskData) {
+export function reconcileReferences(before: DeskData, data: DeskData) {
   for (const result of data.academic.results) {
     if (result.sessionId && !data.sessions.some(item => item.id === result.sessionId &&
       item.subjectId === result.subjectId && item.day === result.day) &&

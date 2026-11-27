@@ -1,3 +1,5 @@
+import { prepareDesk } from '../desk/ui.ts';
+import { cloudEnabled } from '../desk/client.ts';
 import { channelName, exportBackupBlob, importBackupFile, openStudyRepository, requireCurrent, same, type StudyRepository } from '../study/storage.ts';
 import { localClock, monday, validDay } from '../study/time.ts';
 import { baselineAt, scheduleOf } from './allocation.ts';
@@ -66,7 +68,7 @@ function render(reset = false) {
   preview = undefined;
   if (view === 'settings') content.innerHTML = settings(data, term, now);
   else if (!term) {
-    content.innerHTML = '<section class="study-card"><h2>开始使用</h2><p>在设置中创建或选定学期。Study 的历史已在当前浏览器共享。</p>' +
+    content.innerHTML = '<section class="study-card"><h2>开始使用</h2><p>在设置中创建或选定学期。Study 与 Academic 共用学习历史。</p>' +
       '<button type="button" class="study-action primary" data-view="settings">配置课程</button></section>';
   } else {
     switch (view) {
@@ -139,6 +141,7 @@ function download(state: DeskData) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function restore(file: File) {
+  if (cloudEnabled) { location.assign('/desk/data/'); return; }
   const backup = await importBackupFile(file);
   const before = await repository!.read();
   if (before.timer && !same(before.timer, backup.timer)) throw new Error('请先在 Study 结算当前计时，再恢复备份。');
@@ -340,6 +343,7 @@ async function action(button: HTMLButtonElement) {
     return;
   }
   if (!allowDiscard()) return;
+  if (kind === 'import' && cloudEnabled) { location.assign('/desk/data/'); return; }
   if (kind === 'import') return content.querySelector<HTMLInputElement>('[data-backup-file]')?.click();
   if (kind === 'result-course' || kind === 'edit-result') {
     prefill = kind === 'result-course' ? id : '';
@@ -553,6 +557,7 @@ async function initialize(recovery?: DeskData) {
     repository = undefined;
     report(error);
     content.setAttribute('aria-busy', 'false');
+    if (cloudEnabled) { content.innerHTML = '<section class="study-card"><h2>云端数据暂不可用</h2><p>请检查登录、网络和同步状态，原始旧数据会保留。</p><a href="/desk/data/">打开数据中心</a></section>'; return; }
     content.innerHTML = '<section class="study-card"><h2>本地数据暂不可用</h2><p>关闭其他 Study 或 Academic 窗口后再试。已有数据会保留。</p>' +
       '<div class="study-actions"><button type="button" class="study-action" data-action="retry">重试读取</button>' +
       '<label class="study-field">从经过验证的 JSON 恢复<input type="file" accept=".json,application/json" data-recovery-file></label></div></section>';
@@ -561,4 +566,12 @@ async function initialize(recovery?: DeskData) {
 window.addEventListener('focus', () => void refresh());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
 setInterval(() => { if (!document.hidden && (pending || Date.now() - refreshedAt >= 60_000)) void refresh(); }, 2000);
-await initialize();
+try {
+  await prepareDesk(root, content);
+  window.addEventListener('online', () => void refresh());
+  await initialize();
+} catch (error) {
+  report(error);
+  content.setAttribute('aria-busy', 'false');
+  content.textContent = '暂时无法打开学业数据。请检查登录和网络，或关闭旧版窗口后刷新。原始旧数据会保留。';
+}

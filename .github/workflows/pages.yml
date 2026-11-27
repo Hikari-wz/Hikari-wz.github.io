@@ -30,6 +30,14 @@ jobs:
       - run: npm run test:browser
       - run: npm run test:study
       - run: npm run test:academic
+      - run: npm run test:desk
+      - name: Build configured cloud release
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          PUBLIC_DESK_DATA_MODE: cloud
+          PUBLIC_SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build && python3 scripts/verify.py
       - uses: actions/upload-pages-artifact@v4
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:

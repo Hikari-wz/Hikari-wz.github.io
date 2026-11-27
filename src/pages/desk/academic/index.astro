@@ -4,7 +4,7 @@ import Site from '@/layouts/Site.astro';
 import '@/features/study/study.css';
 import '@/features/academic/academic.css';
 ---
-<Site title="学业中心" description="课内分配、课程策略与学业复盘，保存在当前浏览器。" viewportFit>
+<Site title="学业中心" description={import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud' ? '课内分配、课程策略与学业复盘，登录后跨设备共享。' : '课内分配、课程策略与学业复盘，保存在当前浏览器。'} viewportFit>
   <div class="study academic" id="academic">
     <header class="study-header">
       <div>
@@ -19,8 +19,8 @@ import '@/features/academic/academic.css';
       <button type="button" data-view="review"><Icon name="book" size={20} />周报</button>
     </nav>
     <p class="study-status" data-academic-status role="status"></p>
-    <div data-academic-content aria-busy="true" tabindex="-1"><p>正在打开本地学业中心…</p></div>
-    <noscript><p>请启用 JavaScript，以便保存和读取本地数据。</p></noscript>
+    <div data-academic-content aria-busy="true" tabindex="-1"><p>正在打开学业中心…</p></div>
+    <noscript><p>请启用 JavaScript，以便保存和读取学业数据。</p></noscript>
   </div>
 </Site>
 <script>
