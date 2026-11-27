@@ -96,7 +96,13 @@ try {
     request.onerror=()=>reject(request.error);
     request.onsuccess=()=>{const db=request.result;const tx=db.transaction('state','readwrite');tx.objectStore('state').put(value,'current');tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);};
   }),originalLegacy);
+  const waiting=await contextA.newPage();
+  await waiting.goto('/desk/data/');
+  await waiting.getByRole('button',{name:'登录',exact:true}).waitFor();
   await login(a);
+  await waiting.getByText('当前账号：a@example.test',{exact:true}).waitFor();
+  await waiting.locator('[data-sync]').filter({hasText:'已同步'}).waitFor();
+  await waiting.close();
   const preserved=await a.evaluate(()=>new Promise((resolve,reject)=>{
     const request=indexedDB.open('hikari-study-dashboard');request.onerror=()=>reject(request.error);
     request.onsuccess=()=>{const db=request.result;const tx=db.transaction('state','readonly');const read=tx.objectStore('state').get('current');tx.oncomplete=()=>{const version=db.version;db.close();resolve({version,value:read.result});};};

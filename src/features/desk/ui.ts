@@ -27,6 +27,9 @@ export async function prepareDesk(root: HTMLElement, content: HTMLElement) {
   const { data, error } = await client().auth.getSession();
   if (error) throw error;
   if (!data.session) {
+    client().auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) location.reload();
+    });
     status.textContent = '登录后访问统一的私人学习数据。';
     content.replaceChildren();
     const form = document.createElement('form');
@@ -49,6 +52,9 @@ export async function prepareDesk(root: HTMLElement, content: HTMLElement) {
     const backup = document.createElement('a'); backup.href = '/desk/data/#legacy'; backup.textContent = '导出当前浏览器原始旧数据'; panel.append(backup);
     await new Promise<void>(() => {});
   }
+  const account = document.createElement('p');
+  account.textContent = '当前账号：' + (data.session!.user.email ?? '已验证账号');
+  panel.prepend(account);
   await fenceLegacy();
   status.textContent = '正在读取云端数据…';
   const logout = document.createElement('button');

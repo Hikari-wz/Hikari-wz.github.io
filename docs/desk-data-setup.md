@@ -42,3 +42,13 @@ hikari-desk 已连接并应用两份版本化结构迁移，安全扫描通过�
 `test:desk` 使用本地 PostgreSQL 和模拟 Auth/Data API；必须另在真实项目运行 `node scripts/test-desk-live.mjs`。该脚本读取本地环境变量 `SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`DESK_TEST_EMAIL_A` / `DESK_TEST_PASSWORD_A`、`DESK_TEST_EMAIL_B` / `DESK_TEST_PASSWORD_B`。用两个专用合成测试账号，在新建的无私人数据项目测试；不要把生产账号或真实记录用于写入测试。凭证只通过本机环境传入，不记录或提交。
 
 真实 iPhone Safari、Chrome、主屏幕 App，MacBook 和 Windows 分别检查：登录、2 小时高数记录的增改删及 Academic 更新、关闭重开、后台恢复、离线计时/补录、恢复网络、队列冲突和退出隐私。模拟 iPhone 尺寸的 Chrome 结果不等于这些真机通过。
+
+## 无需向助手提供密码的真实 API 权限验收
+
+先在专用测试账号导入合成验收学期，用主账号在另一个 origin（如 localhost 对应原来的 127.0.0.1）亲自登录，保持会话分开。页面会显示当前账号。主账号须尚无业务数据。
+
+验收使用 `scripts/prepare-live-probe.mjs` 读取外部临时配置 JSON（放在 `/tmp`，不提交仓库）。配置包含主账号 UUID、测试账号 UUID 和专用 `term-test` 学期的当前 kind/id/ordinal/version/payload。脚本只接受名称同时含“合成验收”和“测试专用”的学期，不接受密码、JWT 或高权限密钥。
+
+在已完成正常 cloud 构建后运行 `node scripts/prepare-live-probe.mjs /tmp/hikari-live-probe-config.json`。从与主账号登录相同的 origin 打开 `/desk/acceptance/`。此页通过官方 SDK 验证当前账号，只有匹配预期主账号才允许运行；结果只显示检查名称、通过状态和错误码。会检查跨用户查询、直接修改/删除权限、伪造 RPC 行归属、收据读取和匿名请求。删除权限探测使用不存在的目标，不删除真实记录。更新探测使用测试学期原 payload，不变更业务内容。
+
+该页仅生成在被忽略的本地 dist 目录中，正常 Astro build 会将其清除；正式 CI 不运行准备脚本，因此不会把验收页发布到 GitHub Pages。
