@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, devices } from 'playwright-core';
 import ts from 'typescript';
+import { comparable } from '../src/features/academic/review.ts';
 import { migrateStudy } from '../src/features/academic/model.ts';
 import { backupLimit, exportBackup, exportBackupBlob } from '../src/features/study/storage.ts';
 import { instant, largeBackupData, legacy, mondayAt, sunday, sundayFixture, tuesdayAt, wednesday } from './fixtures/academic.mjs';
@@ -54,7 +55,12 @@ const envelope = data => JSON.parse(exportBackup(data));
 const at = (page, time) => page.clock.setFixedTime(new Date(time));
 const form = (page, id) => page.locator('form[data-form="' + id + '"]');
 const button = (page, name) => page.getByRole('button', { name, exact: true });
-const nav = (page, name) => button(page.getByRole('navigation', { name: '学业中心导航' }), name).click();
+const nav = async (page, name) => {
+  if (name === '设置' || name === '课程') {
+    await button(page.locator('.study-header'), '设置').click();
+    if (name === '课程') await button(page, '打开课程管理').click();
+  } else await button(page.getByRole('navigation', { name: '学业中心导航' }), name).click();
+};
 const total = (page, text) => page.locator('[data-academic-total]').filter({ hasText: text }).waitFor();
 const alert = (page, selector, text) => page.locator(selector).filter({ hasText: text }).waitFor();
 const readStatus = (page, text) => alert(page, '[data-academic-status]', text);
@@ -108,6 +114,8 @@ try {
     }
     const { data } = sundayFixture();
     data.sessions = [];
+    const injection = '<img src="/test-injection" onerror="window.injected=1">';
+    data.academic.results[0].note = injection;
     await seed(a, data);
     await a.goto('/desk/');
     await a.getByRole('link', { name: '打开学业中心' }).click();
@@ -122,7 +130,6 @@ try {
     await button(quick, '保存学习记录').click();
     await studyStatus(s, '学习记录已保存');
     await total(a, '2 小时');
-    const note = 'synthetic-record-changed';
     const stale = await ctx.newPage();
     await at(stale, sunday);
     await stale.goto(study);
@@ -131,8 +138,6 @@ try {
       await button(page, '编辑').first().click();
       const fields = form(page, 'session');
       await fields.getByLabel('实际时长').fill('90');
-      await fields.locator('summary').click();
-      await fields.getByLabel('成果或备注').fill(note);
     }
     await form(stale, 'session').getByLabel('实际时长').fill('55');
     await button(form(s, 'session'), '保存修改').click();
@@ -148,15 +153,12 @@ try {
     await ctx.setOffline(true);
     await nav(a, '成果');
     const outcome = form(a, 'result');
-    await outcome.getByLabel('活动').fill('独立练习');
-    await outcome.getByLabel('活动').blur();
+    await outcome.getByLabel('活动').selectOption('独立练习');
     await outcome.getByLabel('独立正确数').fill('6');
     await outcome.getByLabel('总题数').fill('10');
     await outcome.getByLabel('提示后正确（选填）').fill('2');
-    await outcome.locator('summary').click();
+    await outcome.getByText('日期、结果类型与课次', { exact: true }).click();
     await outcome.getByLabel('关联已保存课次').selectOption(sessions[0].id);
-    const injection = '<img src="/test-injection" onerror="window.injected=1">';
-    await outcome.getByLabel('备注').fill(injection);
     await button(outcome, '保存').click();
     await readStatus(a, '已保存');
     await a.getByText('提示后正确 20%', { exact: false }).waitFor();
@@ -214,7 +216,7 @@ try {
     await total(page, '10 小时 50 分');
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const name of ['概览', '课程', '日程', '成果', '周报', '设置']) {
+      for (const name of ['概览', '课程', '成果', '周报', '设置']) {
         await nav(page, name);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, name + ' ' + width);
       }
@@ -225,12 +227,165 @@ try {
   }
   console.log('T01/T02/T10/T13 compiled Astro: navigation, responsive checks, concurrent edit, shared total, feedback unlink, offline save/review/settings, escaped text and backup conflict verified.');
 
+  // Mobile progress, first-time setup, reclassification and choice-only recommendations.
+  {
+    const ctx = await browser.newContext({ ...contextOptions, viewport: { width: 320, height: 760 } });
+    const a = await ctx.newPage();
+    const s = await ctx.newPage();
+    await at(a, sunday);
+    await at(s, sunday);
+    await a.goto(academic);
+    await button(a, '配置课程').click();
+    await a.getByRole('heading', { name: '学期' }).waitFor();
+    assert.equal(await a.getByRole('heading', { name: '整理其他课程的旧记录' }).count(), 0);
+    const firstTerm = form(a, 'term');
+    await firstTerm.getByLabel('名称').fill('合成初设');
+    await firstTerm.getByLabel('开始日').fill('2026-12-01');
+    await firstTerm.getByLabel('结束日（含）').fill('2027-02-01');
+    await button(firstTerm, '创建学期').click();
+    await a.getByRole('heading', { name: '课程管理' }).waitFor();
+    const { data } = sundayFixture();
+    const longName = '高等数学与计算方向跨学科综合练习'.repeat(3);
+    data.subjects.find(row => row.id === 'school-0').name = longName;
+    data.academic.terms[0].courses[0].strategy = '合成旧策略';
+    data.academic.terms[0].courses[0].focus = '合成旧重点';
+    data.plans[0].manual = [580, 320, 0];
+    const sample = { ...data.sessions[0], minutes: 234 };
+    data.sessions = [sample];
+    await seed(a, data);
+    await a.goto(academic);
+    const strip = a.getByRole('navigation', { name: '学业中心导航' });
+    assert.deepEqual(await strip.getByRole('button').allTextContents(), ['概览', '成果', '周报']);
+    assert.equal(await strip.locator('button svg').count(), 3);
+    const courseRow = a.locator('.academic-progress li').filter({ hasText: longName });
+    for (const colorScheme of ['light', 'dark']) {
+      await a.emulateMedia({ colorScheme });
+      for (const width of [320, 375, 1280]) {
+        await a.setViewportSize({ width, height: 900 });
+        for (const screen of ['概览', '周报']) {
+          await nav(a, screen);
+          const meter = courseRow.locator('meter');
+          assert.equal(await meter.getAttribute('value'), '234');
+          assert.equal(await meter.getAttribute('max'), '321');
+          await courseRow.getByText('实际占比 100% · 目标占比 55% · 完成 73%').waitFor();
+          assert.equal(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        }
+      }
+    }
+    await nav(a, '课程');
+    const current = a.locator('[data-keep="course-school-0"]');
+    await current.locator(':scope > summary').click();
+    const edit = form(current, 'course');
+    assert.equal(await edit.locator('[name=strategy],[name=focus]').count(), 0);
+    await button(edit, '保存').click();
+    await readStatus(a, '已保存');
+    const savedCourse = (await raw(a)).payload.data.academic.terms[0].courses[0];
+    assert.equal(savedCourse.strategy, '合成旧策略');
+    assert.equal(savedCourse.focus, '合成旧重点');
+
+    await nav(a, '概览');
+    const focus = form(a, 'next');
+    await a.getByText('调整今日重点', { exact: true }).click();
+    await focus.getByLabel('今日重点').selectOption('change');
+    await focus.getByLabel('课程').selectOption('school-0');
+    assert.equal(await focus.locator('textarea').count(), 0);
+    await a.getByRole('heading', { name: /做一次章节短练/ }).waitFor();
+    await a.getByText('建议详情', { exact: true }).click();
+    await a.getByText('今日手动重点', { exact: true }).waitFor();
+    await focus.getByLabel('今日重点').selectOption('defer');
+    await a.getByText('今日已暂缓常规建议。').waitFor({ timeout: 5000 });
+    assert.equal(await focus.locator('[data-focus-course]').isHidden(), true);
+    await focus.getByLabel('今日重点').selectOption('auto');
+    await a.getByText('今日已暂缓常规建议。').waitFor({ state: 'hidden' });
+    assert.equal((await raw(a)).payload.data.academic.next, null);
+
+    const other = { ...sample, id: 'unassigned', minutes: 55, subjectId: data.academic.otherId };
+    for (const [minutes, budget, expected] of [[0, true, '实际占比 —'], [234, false, '未设计划'], [400, true, '超出 1 小时 19 分']]) {
+      data.sessions = minutes ? [{ ...sample, minutes }] : [];
+      const originalPlans = data.plans;
+      if (!budget) data.plans = [];
+      await seed(a, data);
+      await a.goto(academic);
+      await courseRow.getByText(expected, { exact: false }).waitFor();
+      if (minutes === 400) assert.equal(await courseRow.locator('meter').getAttribute('value'), '321');
+      data.plans = originalPlans;
+    }
+    data.sessions = [sample, other];
+    await seed(a, data);
+    await a.goto(academic);
+    await s.goto(study);
+    await button(s, '记录').click();
+    await s.locator('.study-list').first().getByText(/其他课程/).waitFor();
+    await nav(a, '设置');
+    const map = form(a, 'map-session');
+    assert.equal(await map.getByLabel('目标课程').inputValue(), '');
+    await map.getByLabel('待整理记录').selectOption(other.id);
+    await map.getByLabel('目标课程').selectOption('school-1');
+    const confirmation = new Promise(resolve => a.once('dialog', async dialog => {
+      await dialog.accept();
+      resolve(dialog.message());
+    }));
+    await button(map, '保存').click();
+    assert.match(await confirmation, /2026-12-28 · 55 分钟：其他课程 → 大学英语/);
+    await readStatus(a, '已保存');
+    assert.deepEqual((await raw(s)).payload.data.sessions, [sample, { ...other, subjectId: 'school-1' }]);
+    await s.locator('.study-list').first().getByText(/大学英语/).waitFor();
+    assert.equal(await a.getByRole('heading', { name: '整理其他课程的旧记录' }).count(), 0);
+    await ctx.close();
+  }
+  console.log('Academic mobile: shared 73% meter, light/dark 320–1280 px, empty/over/no-plan states, setup, manual focus and single-record reassignment.');
+
+  // Historical comparison keys and hidden notes survive the new select-only form.
+  {
+    const ctx = await browser.newContext(contextOptions);
+    const a = await ctx.newPage();
+    await at(a, sunday);
+    const { data, term } = sundayFixture();
+    const oldResult = data.academic.results[0];
+    oldResult.note = '合成旧成果备注';
+    await seed(a, data);
+    await a.goto(academic);
+    await nav(a, '成果');
+    const old = a.locator('.academic-list li').filter({ hasText: oldResult.note });
+    await button(old, '编辑').click();
+    const edit = form(a, 'result');
+    assert.equal(await edit.locator('textarea').count(), 0);
+    await edit.getByLabel('实得分').fill('62');
+    await button(edit, '保存').click();
+    await readStatus(a, '已保存');
+    assert.deepEqual((await raw(a)).payload.data.academic.results.find(item => item.id === oldResult.id), { ...oldResult, value: 62 });
+    await edit.getByLabel('活动').selectOption(oldResult.activity);
+    await edit.getByLabel('实得分').fill('75');
+    await edit.getByText('可比条件与错因', { exact: true }).click();
+    await edit.getByLabel('范围或题库').selectOption(oldResult.scope);
+    await edit.getByLabel('难度').selectOption(oldResult.difficulty);
+    await edit.getByLabel('作答条件').selectOption(oldResult.condition);
+    await edit.getByLabel('是否见过').selectOption(oldResult.attempt);
+    await edit.getByLabel('公式提取').check();
+    await button(edit, '保存').click();
+    await readStatus(a, '已保存');
+    const resultData = (await raw(a)).payload.data;
+    const added = resultData.academic.results.find(item => !data.academic.results.some(old => old.id === item.id));
+    assert.equal(added.scope, oldResult.scope);
+    assert.deepEqual(added.tags, ['公式提取']);
+    assert.equal(comparable(resultData, term.id, oldResult.subjectId, '2027-01-03').pair[1].id, added.id);
+    assert.deepEqual(resultData.plans, data.plans);
+    assert.deepEqual(resultData.academic.adjustments, []);
+    await ctx.close();
+  }
+
   // T08/T09/T14: formal exams, temporary work, paper materials and historical course identity.
   {
     const ctx = await browser.newContext(contextOptions);
     const a = await ctx.newPage();
     await at(a, sunday);
-    const { data } = sundayFixture();
+    const { data, term } = sundayFixture();
+    const existing = {
+      id: 'old-prep', termId: term.id, examId: '', subjectId: data.academic.otherId, title: '合成临时作业',
+      kind: 'assignment', certainty: 'confirmed', status: 'scheduled', day: '2027-01-10', time: '', prepare: '2027-01-05', required: false,
+    };
+    data.academic.assessments.push(existing);
+    data.exams[0].note = '合成旧考试备注';
     await seed(a, data);
     await a.goto(academic);
     await nav(a, '课程');
@@ -263,33 +418,84 @@ try {
     const renamed = (await raw(a)).payload.data;
     assert.equal(renamed.subjects.find(item => item.id === 'school-0').name, '合成主课新名');
     assert.deepEqual(renamed.sessions, data.sessions);
-    await nav(a, '日程');
-    await a.locator('[data-keep="new-assessment"] > summary').click();
-    const event = form(a.locator('[data-keep="new-assessment"]'), 'assessment');
-    await event.getByLabel('课程').selectOption(data.academic.otherId);
-    await event.getByLabel('标题').fill('合成临时作业');
-    await event.getByLabel('截止日或考试日').fill('2027-01-06');
-    await button(event, '保存').click();
-    await readStatus(a, '已保存');
     await nav(a, '概览');
-    await a.getByRole('heading', { name: /合成临时作业/ }).waitFor();
-    await nav(a, '日程');
-    await a.locator('[data-keep="new-assessment"] > summary').click();
-    await event.getByLabel('课程').selectOption('school-0');
-    await event.getByLabel('标题').fill('合成正式考试');
-    await event.getByLabel('类型').selectOption('exam');
-    await event.getByLabel('截止日或考试日').fill('2027-01-06');
-    await event.locator('[data-keep="exam-option-new"] > summary').click();
-    await event.getByLabel('Study 重要性').selectOption('important');
-    a.once('dialog', dialog => void dialog.accept());
-    await button(event, '保存').click();
-    await readStatus(a, '已保存');
-    const newExam = (await raw(a)).payload.data;
-    assert.equal(newExam.exams.find(item => item.name === '合成正式考试').importance, 'important');
-    assert.deepEqual(newExam.plans, data.plans);
     const s = await ctx.newPage();
     await at(s, sunday);
-    await s.goto(study);
+    const link = a.getByRole('link', { name: '查看考试与任务' });
+    assert.equal(await link.getAttribute('href'), study + '#study-exams');
+    await s.goto(study + '#study-exams');
+    await s.getByRole('heading', { name: '考试与任务' }).waitFor();
+    const autoBudget = async () => {
+      await form(s, 'plan').getByLabel('使用自定目标').uncheck();
+      return s.locator('#study-budget-preview').innerText();
+    };
+    const baselineBudget = await autoBudget();
+    const existingTask = s.locator('[data-keep="due-old-prep"]');
+    await existingTask.locator(':scope > summary').click();
+    await existingTask.getByLabel('准备开始日（可选）').fill('2027-01-03');
+    await button(existingTask, '保存事项').click();
+    await studyStatus(s, '考核或任务已保存');
+    await a.getByRole('heading', { name: /合成临时作业/ }).waitFor();
+    assert.equal((await raw(a)).payload.data.academic.assessments.find(item => item.id === existing.id).prepare, '2027-01-03');
+    assert.equal(await autoBudget(), baselineBudget);
+    await a.getByText('调整今日重点', { exact: true }).click();
+    const nextChoice = form(a, 'next').getByLabel('今日重点');
+    await nextChoice.selectOption('defer');
+    await a.getByText('今日已暂缓常规建议。').waitFor();
+    await existingTask.getByLabel('截止日或考试日').fill('2027-01-05');
+    await button(existingTask, '保存事项').click();
+    await a.getByRole('heading', { name: '急项' }).waitFor();
+    await nextChoice.selectOption('auto');
+    await existingTask.getByLabel('类型').selectOption('online');
+    await existingTask.getByLabel('办理状态').selectOption('completed');
+    await button(existingTask, '保存事项').click();
+    await studyStatus(s, '考核或任务已保存');
+    await a.getByRole('heading', { name: /合成临时作业/ }).waitFor({ state: 'hidden' });
+    const newEvent = s.locator('[data-keep="new-assessment"]');
+    await newEvent.locator('summary').click();
+    const event = form(newEvent, 'assessment');
+    assert.deepEqual((await raw(a)).payload.data.exams, data.exams);
+    assert.deepEqual((await raw(a)).payload.data.plans, data.plans);
+
+    await event.getByLabel('课程').selectOption('school-0');
+    await event.getByLabel('名称').fill('合成正式考试');
+    await event.getByLabel('类型').selectOption('exam');
+    await event.getByLabel('日期状态').selectOption('tentative');
+    await event.getByLabel('截止日或考试日').fill('2027-01-06');
+    await button(event, '添加事项').click();
+    await studyStatus(s, '考核或任务已保存');
+    const tentative = (await raw(a)).payload.data.academic.assessments.find(item => item.title === '合成正式考试');
+    assert.deepEqual((await raw(a)).payload.data.exams, data.exams);
+    assert.equal(await autoBudget(), baselineBudget);
+    const editEvent = s.locator('[data-keep="due-' + tentative.id + '"]');
+    await editEvent.locator(':scope > summary').click();
+    await editEvent.getByLabel('日期状态').selectOption('unknown');
+    await button(editEvent, '保存事项').click();
+    await studyStatus(s, '考核或任务已保存');
+    assert.equal((await raw(a)).payload.data.academic.assessments.find(item => item.id === tentative.id).day, '');
+    await editEvent.getByLabel('日期状态').selectOption('confirmed');
+    await editEvent.getByLabel('截止日或考试日').fill('2027-01-06');
+    await editEvent.getByLabel('正式考试重要程度').selectOption('important');
+    s.once('dialog', dialog => void dialog.accept());
+    await button(editEvent, '保存事项').click();
+    await studyStatus(s, '考核或任务已保存');
+    const newExam = (await raw(a)).payload.data;
+    assert.equal(newExam.exams.find(item => item.id === tentative.id).importance, 'important');
+    assert.equal(newExam.academic.assessments.filter(item => item.examId === tentative.id).length, 1);
+    assert.deepEqual(newExam.plans, data.plans);
+    assert.notEqual(await autoBudget(), baselineBudget);
+    await a.getByText('合成正式考试 · 3 天后', { exact: false }).waitFor();
+    const previousExam = s.locator('#study-exams li').filter({ hasText: '合成旧考试备注' });
+    await button(previousExam, '编辑').click();
+    const official = form(s, 'exam');
+    await official.getByLabel('考试日期').fill('2027-01-12');
+    await button(official, '保存修改').click();
+    await studyStatus(s, '考试已保存');
+    const edited = (await raw(a)).payload.data;
+    assert.equal(edited.exams.find(row => row.id === data.exams[0].id).note, '合成旧考试备注');
+    assert.equal(edited.exams.find(row => row.id === data.exams[0].id).day, '2027-01-12');
+    await a.locator('.academic-progress li').filter({ hasText: /中国近代史/ }).waitFor();
+    await button(s, '概览').click();
     await alert(s, '.study-total', '考前冲刺期');
     await nav(a, '设置');
     await a.locator('[data-keep="term-term-test"] > summary').click();
@@ -701,7 +907,7 @@ try {
       const selection = form(page, 'review-week');
       await selection.getByLabel('查看日期所在周').fill('2027-01-04');
       await button(selection, '查看周报').click();
-      return page.locator('.academic-table').innerText();
+      return page.locator('.academic-progress').innerText();
     };
     const history = await closedWeek();
     assert.match(history, /57%/);

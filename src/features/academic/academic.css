@@ -1,10 +1,9 @@
 .academic .study-nav {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .academic [data-academic-content] { display: grid; gap: 1rem; }
 .academic .study-card { min-width: 0; overflow-wrap: anywhere; }
-.academic .academic-hero { background: var(--surface); }
 .academic .academic-meta { display: flex; flex-wrap: wrap; gap: .45rem 1.2rem; }
 .academic .academic-meta p { margin: 0; }
 .academic .academic-metric { font-family: var(--serif); font-size: clamp(1.45rem, 4vw, 2.4rem); }
@@ -20,18 +19,9 @@
 .academic details > form { margin-block-start: .6rem; }
 .academic .academic-list { list-style: none; margin: 0; padding: 0; }
 .academic .academic-list > li { border-top: 1px solid var(--rule); padding: .6rem 0; }
-.academic .academic-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.academic .academic-table th, .academic .academic-table td {
-  border-bottom: 1px solid var(--rule);
-  text-align: end;
-  padding: .45rem .25rem;
-  vertical-align: top;
-}
-.academic .academic-table :is(th, td):first-child { text-align: start; }
+.academic-progress { margin: 0; padding: 0; list-style: none; }
+.academic-progress .study-between > * { min-width: 0; }
+.academic-progress small { display: block; }
 .academic [hidden] { display: none !important; }
 .academic :is(input, select, textarea) { min-width: 0; max-width: 100%; }
 .academic input[type="checkbox"] { width: auto; }
-@media (max-width: 620px) {
-  body:has(.academic) { padding-bottom: calc(7.25rem + env(safe-area-inset-bottom)); }
-  .academic .study-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}

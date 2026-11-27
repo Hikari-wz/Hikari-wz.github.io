@@ -1,4 +1,5 @@
 ---
+import Icon from '@/components/Icon.astro';
 import Site from '@/layouts/Site.astro';
 import '@/features/study/study.css';
 import '@/features/academic/academic.css';
@@ -10,15 +11,12 @@ import '@/features/academic/academic.css';
         <a class="study-breadcrumb" href="/desk/" lang="en">Desk</a>
         <h1>学业中心</h1>
       </div>
-      <a class="study-action" href="/desk/study/">学习工作台</a>
+      <button class="study-action" type="button" data-view="settings">设置</button>
     </header>
     <nav class="study-nav" aria-label="学业中心导航">
-      <button type="button" data-view="home" aria-current="page">概览</button>
-      <button type="button" data-view="courses">课程</button>
-      <button type="button" data-view="schedule">日程</button>
-      <button type="button" data-view="results">成果</button>
-      <button type="button" data-view="review">周报</button>
-      <button type="button" data-view="settings">设置</button>
+      <button type="button" data-view="home" aria-current="page"><Icon name="chart" size={20} />概览</button>
+      <button type="button" data-view="results"><Icon name="check" size={20} />成果</button>
+      <button type="button" data-view="review"><Icon name="book" size={20} />周报</button>
     </nav>
     <p class="study-status" data-academic-status role="status"></p>
     <div data-academic-content aria-busy="true" tabindex="-1"><p>正在打开本地学业中心…</p></div>

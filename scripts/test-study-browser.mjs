@@ -106,7 +106,7 @@ try {
   await total('考前冲刺期');
   await at('2026-11-25T06:00:00Z');
   await total('常规学习期');
-  await button('考试管理').click();
+  await button('考试与任务').click();
   await page.locator('details[data-keep=ended-exams] summary').click();
   await text('details[data-keep=ended-exams]', '高数期末');
   console.log('Weekly allocation, copy and automatic exam-stage transition verified.');
@@ -119,14 +119,30 @@ try {
   await button('45 分', quick).click();
   await quick.locator('summary').click();
   await quick.getByLabel('质量或进展').selectOption('能够独立应用');
-  await quick.getByLabel('成果或备注').fill('独立完成 STL 练习 <b>原样显示</b>');
   await button('保存学习记录', quick).click();
   await status('学习记录已保存');
-  assert.equal(await page.locator('.study-list p b').count(), 0, 'escaped data');
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('hikari-study-dashboard', 2);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('state', 'readwrite');
+      const store = tx.objectStore('state');
+      const current = store.get('current');
+      current.onsuccess = () => {
+        current.result.data.sessions[0].note = '独立完成 STL 练习 <b>原样显示</b>';
+        store.put(current.result, 'current');
+      };
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+    request.onerror = () => reject(request.error);
+  }));
+  await page.reload();
   await open('概览');
   await total('45 分钟');
   await open('记录');
   await expectNoOverflow('iPhone records');
+  assert.equal(await page.locator('.study-list p b').count(), 0, 'escaped data');
   await button('编辑', page.locator('.study-list li').filter({ hasText: '独立完成 STL 练习' }).first()).click();
   await quick.getByLabel('实际时长').fill('120');
   await button('保存修改', quick).click();
@@ -188,7 +204,7 @@ try {
   await button('保存复盘').click();
   await status('复盘已保存');
   await button('建立下周计划').click();
-  assert.equal(await weekly.getByLabel('本周重点').inputValue(), '继续学习容器');
+  await weekly.getByText('继续学习容器', { exact: true }).waitFor();
   await weekly.locator('summary').click();
   await weekly.getByLabel('使用自定目标').check();
   await weekly.locator('[name=t0]').fill('500');
@@ -212,6 +228,7 @@ try {
   const json = await readFile(await (await download).path(), 'utf8');
   const backup = JSON.parse(json);
   assert.equal(backup.data.sessions.length, 2);
+  assert.ok(backup.data.sessions.some(row => row.note === '独立完成 STL 练习 <b>原样显示</b>'));
   assert.equal(backup.data.reviews[0].knowledge, 'STL');
   assert.deepEqual(backup.data.plans.find(plan => plan.manual).manual, [500, 800, 212]);
   assert.equal(backup.data.timer, null);

@@ -1,3 +1,4 @@
+import { currentTerm, type Assessment, type DeskData } from '../academic/model.ts';
 import {
   examStatusNames, importanceNames, masteryNames, phases, phaseNames, qualityFor, tracks, trackNames,
   type Exam, type Review, type Session, type Split, type StudyData, type Subject, type Track, type WeeklyPlan,
@@ -114,7 +115,7 @@ export function overview(data: StudyData, now: LocalTime) {
     ${actions(button(plan ? '查看周计划' : '制定周计划', 'plan', !plan ? 'primary' : ''))}`);
   const exams = card('最近考试', `${closest ? `<p><strong>${e(closest.name)}</strong> · ${countdown(now, closest)}</p>` : muted('近期没有待考事项。')}
     ${urgent.length ? `<h3>未来 28 天的重要考试</h3>${list(urgent.map(exam => `${e(exam.name)} <small>${e(exam.day)}</small>`))}` : ''}
-    ${actions(button('考试管理', 'exams'))}`);
+    ${actions(button('考试与任务', 'exams'))}`);
   const next = card('下一步建议', `<p>${e(advice.next)}</p>
     ${advice.messages.length ? `<h3>学习提醒</h3>${list(advice.messages.map(e))}` : ''}
     ${week === shiftDay(now.day, -6) ? actions(button('开始本周复盘', 'review', 'primary')) : ''}`);
@@ -134,8 +135,9 @@ function examEntry(data: StudyData, exam: Exam, ended: boolean) {
     ] : []), button('删除', 'delete-exam', 'danger', exam.id))}`;
 }
 
-export function examForm(data: StudyData, now: LocalTime, exam?: Exam) {
+export function examForm(data: DeskData, now: LocalTime, exam?: Exam) {
   const subjects = data.subjects.filter(subject => !subject.archived || subject.id === exam?.subjectId);
+  const metadata = data.academic.assessments.find(item => item.examId === exam?.id);
   return form('exam', fields(
     textInput('考试名称', 'name', exam?.name, true),
     select('对应科目', 'subjectId', option('', '选择科目', exam?.subjectId ?? '') + tracks.map(track =>
@@ -147,7 +149,9 @@ export function examForm(data: StudyData, now: LocalTime, exam?: Exam) {
     input('结束时间（可选）', 'end', exam?.end ?? '', 'type="time"'),
     select('掌握程度', 'mastery', options(masteryNames, exam?.mastery ?? 'new')),
     select('考试状态', 'status', options(examStatusNames, exam?.status ?? 'scheduled')),
-  ) + textarea('备注（可选）', 'note', exam?.note) + actions(submit(exam ? '保存修改' : '添加考试'),
+  ) + (data.academic.terms.length ? `<details ${metadata?.required || metadata?.prepare ? 'open' : ''}>
+    <summary>学业中心考核选项</summary>${dateInput('准备开始日（可选）', 'prepare', metadata?.prepare ?? '', '9998-12-31', false)}
+    <label class="study-check"><input name="required" type="checkbox"${metadata?.required ? ' checked' : ''}>必需考核</label></details>` : '') + actions(submit(exam ? '保存修改' : '添加考试'),
     ...(exam ? [button('取消编辑', 'exams')] : [])), exam?.id);
 }
 
@@ -159,7 +163,47 @@ export function allocationText(day: WeeklyPlan['budget']['days'][number]) {
   return day.parts.filter(part => part.minutes > 0).map(part =>
     `${phaseNames[part.phase]}${day.parts.length > 1 ? ` ${part.minutes} 分` : ''}`).join(' · ') || phaseNames[day.parts[0].phase];
 }
-export function planView(data: StudyData, now: LocalTime, week: string, options: {
+const assessmentKinds = { exam: '考试', assignment: '作业', online: '线上学习', oral: '口语', diagnostic: '摸底', preparation: '准备' };
+const assessmentCertainty = { confirmed: '确定', tentative: '暂定', unknown: '未定' };
+const assessmentStatus = { scheduled: '待处理', completed: '已完成', cancelled: '已取消' };
+
+function assessmentForm(data: DeskData, item?: Assessment) {
+  const terms = data.academic.terms.filter(term => !term.archived || term.id === item?.termId);
+  const termId = item?.termId ?? currentTerm(data)?.id ?? terms[0]?.id ?? '';
+  const subjects = data.subjects.filter(subject => subject.track === 'school' && (!subject.archived || subject.id === item?.subjectId));
+  return form('assessment', fields(
+    select('所属学期', 'termId', terms.map(term => option(term.id, term.name, termId)).join(''), true),
+    select('课程', 'subjectId', option('', '请选择', item?.subjectId ?? '') + subjects.map(subject => option(subject.id, subject.name, item?.subjectId ?? '')).join(''), true),
+    textInput('名称', 'title', item?.title, true),
+    select('类型', 'kind', options(assessmentKinds, item?.kind ?? 'assignment')),
+    select('日期状态', 'certainty', options(assessmentCertainty, item?.certainty ?? 'confirmed')),
+    select('办理状态', 'status', options(assessmentStatus, item?.status ?? 'scheduled')),
+    dateInput('截止日或考试日', 'day', item?.day ?? '', '9998-12-31', false),
+    input('截止时刻（可选）', 'time', item?.time ?? '', 'type="time"'),
+    dateInput('准备开始日（可选）', 'prepare', item?.prepare ?? '', '9998-12-31', false),
+    `<label class="study-check"><input name="required" type="checkbox"${item?.required ? ' checked' : ''}>必需考核</label>`,
+  ) + `<div data-official-fields hidden>${select('正式考试重要程度', 'importance', options(importanceNames, 'normal'))}
+    ${muted('确定的考试计入 Study 的阶段与预算试算。')}</div>` +
+    actions(submit(item ? '保存事项' : '添加事项')), item?.id);
+}
+
+function academicSchedule(data: DeskData) {
+  const items = data.academic.assessments.filter(item => !item.examId)
+    .sort((a, b) => (a.day || '9999').localeCompare(b.day || '9999'));
+  const canAdd = data.academic.terms.some(term => !term.archived);
+  const entry = (item: Assessment) => `<details data-keep="due-${e(item.id)}">
+    <summary>${e(item.title)} · ${assessmentKinds[item.kind]} · ${assessmentCertainty[item.certainty]}${item.day ? ' · ' + e(item.day) : ''} · ${assessmentStatus[item.status]}</summary>
+    ${assessmentForm(data, item)}${actions(button('删除事项', 'delete-assessment', 'danger', item.id))}</details>`;
+  const active = items.filter(item => item.status === 'scheduled');
+  const closed = items.filter(item => item.status !== 'scheduled');
+  return `<h3>考核与任务</h3>
+    ${canAdd ? '<details data-keep="new-assessment"><summary>添加考核或任务</summary>' + assessmentForm(data) + '</details>' :
+      '<p class="study-muted">在 <a href="/desk/academic/">学业中心</a> 创建学期后，可以添加考核和任务。</p>'}
+    ${active.map(entry).join('')}
+    ${closed.length ? '<details data-keep="closed-assessments"><summary>已完成及已取消（' + closed.length + '）</summary>' + closed.map(entry).join('') + '</details>' : ''}`;
+}
+
+export function planView(data: DeskData, now: LocalTime, week: string, options: {
   draftMinutes?: number[]; draftFocus?: string; exam?: Exam;
 } = {}) {
   const current = monday(now.day);
@@ -185,7 +229,7 @@ export function planView(data: StudyData, now: LocalTime, week: string, options:
         ${numberInput('可用（分钟）', `d${index}`, minutes[index], 0, 1440)}
         ${examDay ? numberInput('考前（分钟，可选）', `b${index}`, before[index] ?? '', 0, 1440, false) : ''}</div>`;
     }).join('')}</div>
-    ${textarea('本周重点（可选）', 'focus', options.draftFocus ?? saved?.focus ?? '')}
+    ${options.draftFocus || saved?.focus ? '<p class="study-note">' + e(options.draftFocus ?? saved?.focus ?? '') + '</p>' : ''}
     <div id="study-budget-preview">${budgetPreview(budget, saved?.manual && saved.budget.allocatable === budget.allocatable ? saved.manual : null)}</div>
     <details ${saved?.manual ? 'open' : ''}><summary>直接调整三类目标</summary>
       <label class="study-check"><input name="manual" type="checkbox"${saved?.manual ? ' checked' : ''}>使用自定目标</label>
@@ -203,12 +247,12 @@ export function planView(data: StudyData, now: LocalTime, week: string, options:
   const planCard = card('每周时间分配', pager + weekPicker +
     (historic ? snapshot : `${saved ? `<details><summary>查看已保存的预算快照</summary>${snapshot}</details>` : ''}
       ${editor}${saved ? muted('保存前的试算使用当前考试与比例。概览继续使用已保存的快照。') : ''}`));
-  const exams = `<section class="study-card" id="study-exams" tabindex="-1"><h2>考试管理</h2>
+  const exams = `<section class="study-card" id="study-exams" tabindex="-1"><h2>考试与任务</h2>
     <p><strong data-stage-name>${phaseNames[stage.phase]}</strong> · <span data-stage-reason>${e(stage.reason)}</span></p>
     ${actions(button('阶段设置', 'settings'))}
     <details ${options.exam ? 'open' : ''} id="study-exam-editor"><summary>${options.exam ? '编辑考试' : '添加考试'}</summary>${examForm(data, now, options.exam)}</details>
     <h3>待考</h3>${active.length ? list(active.map(exam => examEntry(data, exam, false))) : muted('暂无待考事项。')}
-    <details data-keep="ended-exams"><summary>已结束及已取消（${ended.length}）</summary>${ended.length ? list(ended.map(exam => examEntry(data, exam, true))) : muted('暂无历史考试。')}</details></section>`;
+    <details data-keep="ended-exams"><summary>已结束及已取消（${ended.length}）</summary>${ended.length ? list(ended.map(exam => examEntry(data, exam, true))) : muted('暂无历史考试。')}</details>${academicSchedule(data)}</section>`;
   return columns(planCard, exams + card('该周实际投入', projectProgress(actual, saved && targetsOf(saved))), 'study-overview');
 }
 
@@ -231,7 +275,7 @@ export function sessionForm(data: StudyData, now: LocalTime, session?: Session, 
     ${!finish ? actions(...[15, 30, 45, 60, 90, 120].map(minutes => button(`${minutes} 分`, 'quick-minute', '', String(minutes)))) : ''}
     <details ${session?.quality || session?.note ? 'open' : ''}><summary>质量与成果（可选）</summary>
       ${select('质量或进展', 'quality', qualityOptions(chosen?.track ?? 'school', session?.quality))}
-      ${textarea('成果或备注', 'note', session?.note)}</details>
+      ${session?.note ? '<p class="study-note">' + e(session.note) + '</p>' : ''}</details>
     ${actions(submit(finish ? '保存计时记录' : session ? '保存修改' : '保存学习记录'),
       ...(session || finish ? [button(finish ? '返回计时' : '取消编辑', finish ? 'close-dialog' : 'record')] : []))}
   `, finish ? timer?.id : session?.id);
