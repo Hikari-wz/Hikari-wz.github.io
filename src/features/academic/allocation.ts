@@ -25,8 +25,9 @@ export function scheduleOf(inputs: Inputs, term: Term) {
   const assessments = inputs.assessments.filter(item => item.termId === term.id);
   const details = new Map(assessments.filter(item => item.examId).map(item => [item.examId, item]));
   return [
-    ...assessments.filter(item => !item.examId).map(item => ({
+    ...assessments.filter(item => !item.examId).map(({ examDraft, ...item }) => ({
       ...item,
+      id: examDraft?.id ?? item.id,
       cutoff: item.time ? clockMinute(item.time) : untimedCutoff(inputs.settings),
       formal: false,
     })),
@@ -143,6 +144,24 @@ const stages: Record<Exclude<Stage, 'vacation'>, [string, number]> = {
   sprint: ['用未见资料限时验收，再查漏', 60],
 };
 
+function training(data: DeskData, term: Term, clock: Clock, stage: Exclude<Stage, 'vacation'>, course: Course, useOldFocus = true) {
+  const recent = data.academic.results.filter(result => result.termId === term.id && result.subjectId === course.subjectId &&
+    result.day <= clock.day && dayDistance(result.day, clock.day) < rules.evidenceDays).sort((a, b) => b.at - a.at)[0];
+  let [action, minutes] = stages[stage];
+  if (course.mode === 'task') [action, minutes] = ['整理开卷资料或检查待交任务', 30];
+  else if (course.mode === 'bank' && stage !== 'sprint') [action, minutes] = ['检查题库覆盖并做主动回忆', 30];
+  else if (stage === 'prepare' && recent?.tags.includes('运算化简')) action = '独立做化简短练，关闭答案重推，次日闭卷复测';
+  else if (stage === 'prepare' && recent?.tags.includes('程序追踪')) action = '手工推演短程序，遮住答案重做输出题';
+  else if (stage === 'prepare' && recent?.tags.includes('借助提示')) action = '遮住答案重做，次日闭卷复测，一周后做同类变式';
+  else if (recent?.tags.includes('公式提取') && stage !== 'sprint') action = '闭卷提取公式，再做一道应用短练';
+  else if (recent?.tags.includes('时间不足') && stage !== 'sprint') action = '用少量题做短时限训练，记录卡住的位置';
+  else if (useOldFocus && course.focus && stage === 'normal') action = course.focus;
+  else if (stage === 'normal' && recent && ['阅读', '听力', '词汇', '翻译', '写作'].includes(recent.activity)) {
+    action = '按' + recent.activity + '做一组短练，再回顾薄弱题型';
+  }
+  return { action, minutes };
+}
+
 export function recommend(data: DeskData, term: Term, clock: Clock, target: Vector): Suggestion | undefined {
   if (term.archived || !inTerm(clock.day, term)) return;
   const inputs = inputsOf(data);
@@ -162,9 +181,9 @@ export function recommend(data: DeskData, term: Term, clock: Clock, target: Vect
   const next = data.academic.next;
   const nextInfo = courses.find(({ course }) => course.subjectId === next?.subjectId);
   if (next?.termId === term.id && next.day === clock.day && next.defer) return;
-  if (next?.termId === term.id && next.day === clock.day && (!nextInfo || nextInfo.eligible) &&
+  if (next?.termId === term.id && next.day === clock.day && nextInfo?.eligible &&
       !inputs.archived.includes(next.subjectId)) {
-    return { subjectId: next.subjectId, action: next.action, code: 'manual', reason: '今日手动重点' };
+    return { subjectId: next.subjectId, ...training(data, term, clock, stage, nextInfo.course, false), code: 'manual', reason: '今日手动重点' };
   }
   const preparation = pool.find(item => !isExam(item) && clock.day >= (item.prepare || shiftDay(item.day, -rules.taskDays)));
   if (preparation) return { ...support(preparation, 'preparation', '已进入准备窗口'), minutes: 30 };
@@ -195,20 +214,7 @@ export function recommend(data: DeskData, term: Term, clock: Clock, target: Vect
     Number(!!b.course.focus) - Number(!!a.course.focus) || byId(courseId(a.course), courseId(b.course)))[0];
   const pick = deficit || idle || fallback;
   if (!pick) return;
-  const recent = data.academic.results.filter(result => result.termId === term.id && result.subjectId === pick.course.subjectId &&
-    result.day <= clock.day && dayDistance(result.day, clock.day) < rules.evidenceDays).sort((a, b) => b.at - a.at)[0];
-  let [action, minutes] = stages[stage];
-  if (pick.course.mode === 'task') [action, minutes] = ['整理开卷资料或检查待交任务', 30];
-  else if (pick.course.mode === 'bank' && stage !== 'sprint') [action, minutes] = ['检查题库覆盖并做主动回忆', 30];
-  else if (stage === 'prepare' && recent?.tags.includes('运算化简')) action = '独立做化简短练，关闭答案重推，次日闭卷复测';
-  else if (stage === 'prepare' && recent?.tags.includes('程序追踪')) action = '手工推演短程序，遮住答案重做输出题';
-  else if (stage === 'prepare' && recent?.tags.includes('借助提示')) action = '遮住答案重做，次日闭卷复测，一周后做同类变式';
-  else if (recent?.tags.includes('公式提取') && stage !== 'sprint') action = '闭卷提取公式，再做一道应用短练';
-  else if (recent?.tags.includes('时间不足') && stage !== 'sprint') action = '用少量题做短时限训练，记录卡住的位置';
-  else if (pick.course.focus && stage === 'normal') action = pick.course.focus;
-  else if (stage === 'normal' && recent && ['阅读', '听力', '词汇', '翻译', '写作'].includes(recent.activity)) {
-    action = '按' + recent.activity + '做一组短练，再回顾薄弱题型';
-  }
+  let { action, minutes } = training(data, term, clock, stage, pick.course);
   if (deficit) minutes = deficit.gap![1] < 30 ? 30 : deficit.gap![1] < 60 ? 45 : 60;
   return {
     subjectId: pick.course.subjectId, action, minutes, code: deficit ? 'gap' : idle ? 'idle' : 'focus',

@@ -1,4 +1,4 @@
-import type { DeskData } from '../academic/model.ts';
+import { inTerm, type Assessment, type DeskData } from '../academic/model.ts';
 import {
   defaultSettings, phaseNames, phases, tracks, type Exam, type Review, type Session, type Settings, type Split, type StudyData, type Track,
 } from './model.ts';
@@ -21,7 +21,7 @@ const status = container.querySelector<HTMLElement>('#study-status')!;
 const policy = container.querySelector<HTMLTemplateElement>('#study-policy')!;
 const views = ['overview', 'plan', 'records', 'policy', 'settings', 'review'] as const;
 type View = typeof views[number];
-let active: View = 'overview';
+let active: View = location.hash === '#study-exams' ? 'plan' : 'overview';
 let data: DeskData;
 let repository: StudyRepository;
 let legacySnapshot: StudyData | undefined;
@@ -62,6 +62,17 @@ function updateView(target: View, section?: string) {
   (section ? destination : container)?.scrollIntoView({ block: 'start', behavior: 'instant' });
 }
 
+function assessmentFields(form: HTMLFormElement) {
+  const fields = new FormData(form);
+  const official = form.dataset.form === 'exam' ? fields.get('certainty') === 'confirmed' :
+    fields.get('kind') === 'exam' && fields.get('certainty') === 'confirmed';
+  const officialFields = form.querySelector<HTMLElement>('[data-official-fields]');
+  if (officialFields) officialFields.hidden = !official;
+  const date = form.elements.namedItem('day') as HTMLInputElement;
+  date.disabled = fields.get('certainty') === 'unknown';
+  date.required = !date.disabled;
+}
+
 function render() {
   if (legacySnapshot) {
     const time = localClock(Date.now(), legacySnapshot.settings.timezone);
@@ -98,6 +109,7 @@ function render() {
     case 'review': markup = reviewView(data, time, reviewWeek || current); break;
   }
   content.innerHTML = markup;
+  content.querySelectorAll<HTMLFormElement>('form[data-form="assessment"], form[data-form="exam"]').forEach(assessmentFields);
   content.setAttribute('aria-busy', 'false');
   for (const item of content.querySelectorAll<HTMLDetailsElement>('details[data-keep]')) {
     if (open.includes(item.dataset.keep)) item.open = true;
@@ -197,7 +209,7 @@ async function saveForm(form: HTMLFormElement) {
     if (!validDay(day) || day > now().day) throw new Error('学习日期必须是今天或更早。');
     const record: Session = {
       id: key || crypto.randomUUID(), day, subjectId: text('subjectId'),
-      minutes: integer(fields, 'minutes'), quality: text('quality'), note: text('note'),
+      minutes: integer(fields, 'minutes'), quality: text('quality'), note: data.sessions.find(item => item.id === key)?.note ?? '',
     };
     await commit(state => {
       if (finishing) {
@@ -237,7 +249,7 @@ async function saveForm(form: HTMLFormElement) {
           const previous = state.plans.find(plan => plan.week === key);
           requireCurrent(previous, data.plans.find(plan => plan.week === key));
           replace(state.plans, plan => plan.week === key, {
-            week: key, minutes: days, beforeExam: before, budget, manual, focus: text('focus'),
+            week: key, minutes: days, beforeExam: before, budget, manual, focus: draft?.week === key ? draft.focus ?? previous?.focus ?? '' : previous?.focus ?? '',
             previousTargets: previous ? targetsOf(previous) : null, revision: (previous?.revision ?? 0) + 1, updatedAt: Date.now(),
           });
         }, '周计划快照已保存。');
@@ -245,19 +257,79 @@ async function saveForm(form: HTMLFormElement) {
         break;
       }
       case 'exam': {
+        const certainty = (text('certainty') || 'confirmed') as Assessment['certainty'];
+        const demote = certainty !== 'confirmed';
+        if (demote && !confirm('改为暂定或未定后，这场考试会退出 Study 的自动阶段与预算试算。继续？')) return;
         const exam: Exam = {
           id: key || crypto.randomUUID(), name: text('name'), subjectId: text('subjectId'), day: text('day'),
           start: text('start'), end: text('end'), importance: text('importance') as Exam['importance'],
-          mastery: text('mastery') as Exam['mastery'], status: text('status') as Exam['status'], note: text('note'),
+          mastery: text('mastery') as Exam['mastery'], status: text('status') as Exam['status'], note: data.exams.find(item => item.id === key)?.note ?? '',
         };
         if (exam.start && exam.end && exam.start >= exam.end) throw new Error('考试结束时间必须晚于开始时间。');
         await commit(state => {
           const previous = state.exams.find(item => item.id === key);
           if (key) requireCurrent(previous, data.exams.find(item => item.id === key));
           if (exam.status === 'completed') exam.closedAt = previous?.closedAt ?? Date.now();
-          replace(state.exams, item => item.id === exam.id, exam);
-        }, '考试已保存，当前阶段已重新计算。');
+          const original = data.academic.assessments.find(item => item.examId === key);
+          const metadata = state.academic.assessments.find(item => item.examId === key);
+          requireCurrent(metadata, original);
+          const prepare = text('prepare');
+          const required = fields.has('required');
+          const school = state.subjects.some(item => item.id === exam.subjectId && item.track === 'school');
+          const term = state.academic.terms.find(item => inTerm(exam.day || previous?.day || '', item) &&
+            (!item.archived || item.id === metadata?.termId || demote));
+          if (demote && (!previous || !term || !school)) {
+            throw new Error('请为校内考试选择所属学期内的日期，或先建立学期。');
+          }
+          if ((prepare || required) && (!term || !school)) throw new Error('准备窗口和必需考核需要对应一个学期内的校内科目。');
+          if (demote) state.exams = state.exams.filter(item => item.id !== exam.id);
+          else replace(state.exams, item => item.id === exam.id, exam);
+          if (term && school && (demote || metadata || prepare || required)) {
+            const assessment: Assessment = {
+              id: metadata?.id ?? exam.id, examId: demote ? '' : exam.id, termId: term.id, subjectId: exam.subjectId,
+              kind: 'exam', certainty, title: exam.name, status: exam.status, day: exam.day,
+              time: exam.end, prepare, required,
+            };
+            if (demote) {
+              const { id, start, importance, mastery, note, closedAt } = exam;
+              assessment.examDraft = { id, start, importance, mastery, note, ...(closedAt !== undefined ? { closedAt } : {}) };
+            }
+            replace(state.academic.assessments, item => item.id === assessment.id, assessment);
+          }
+        }, demote ? '考核已更新，当前阶段已重新计算。' : '考试已保存，当前阶段已重新计算。');
         examId = '';
+        break;
+      }
+      case 'assessment': {
+        const row: Assessment = {
+          id: key || crypto.randomUUID(), examId: '', termId: text('termId'), subjectId: text('subjectId'),
+          title: text('title'), kind: text('kind') as Assessment['kind'], certainty: text('certainty') as Assessment['certainty'],
+          status: text('status') as Assessment['status'], day: text('certainty') === 'unknown' ? '' : text('day'),
+          time: text('time'), prepare: text('prepare'), required: fields.has('required'),
+        };
+        const formal = row.kind === 'exam' && row.certainty === 'confirmed';
+        if (formal && !confirm('转为正式考试会影响 Study 后续自动阶段和预算试算。继续？')) return;
+        await commit(state => {
+          const original = state.academic.assessments.find(item => item.id === key);
+          requireCurrent(original, data.academic.assessments.find(item => item.id === key));
+          if (key && (!original || original.examId)) throw new Error('事项已变更，请重新打开日程。');
+          const draft = original?.examDraft;
+          if (formal) {
+            const examKey = draft?.id ?? row.id;
+            if (state.exams.some(item => item.id === examKey)) throw new Error('此事项已关联正式考试。');
+            const start = text('start');
+            if (start && row.time && start >= row.time) throw new Error('考试结束时间必须晚于开始时间。');
+            row.examId = examKey;
+            state.exams.push({
+              id: examKey, subjectId: row.subjectId, name: row.title, day: row.day, start, end: row.time,
+              importance: text('importance') as Exam['importance'], mastery: draft?.mastery ?? 'new', status: row.status, note: draft?.note ?? '',
+              ...(row.status === 'completed' ? { closedAt: draft?.closedAt ?? Date.now() } : {}),
+            });
+          } else if (row.kind === 'exam' && draft) {
+            row.examDraft = draft;
+          }
+          replace(state.academic.assessments, item => item.id === row.id, row);
+        }, '考核或任务已保存。');
         break;
       }
       case 'settings': {
@@ -350,7 +422,7 @@ async function action(button: HTMLButtonElement) {
       const nextPlan = data.plans.find(plan => plan.week === week);
       draft = nextPlan ? undefined : {
         week, minutes: currentPlan?.minutes,
-        focus: (button.form?.elements.namedItem('nextFocus') as HTMLTextAreaElement | null)?.value,
+        focus: (button.form?.elements.namedItem('nextFocus') as HTMLTextAreaElement | null)?.value ?? data.reviews.find(item => item.week === key)?.nextFocus,
       };
       updateView('plan');
       return;
@@ -374,6 +446,15 @@ async function action(button: HTMLButtonElement) {
         state.settings.ratios = defaults.ratios;
         state.settings.buffer = defaults.buffer;
       }, '已恢复默认比例与机动时间。');
+      break;
+    case 'delete-assessment':
+      if (!confirm('删除这条考核或任务？')) return;
+      await commit(state => {
+        const item = state.academic.assessments.find(row => row.id === key);
+        requireCurrent(item, data.academic.assessments.find(row => row.id === key));
+        if (!item || item.examId) throw new Error('事项已变更，请重新打开日程。');
+        state.academic.assessments = state.academic.assessments.filter(row => row.id !== key);
+      }, '事项已删除。');
       break;
     case 'delete-exam':
       if (!confirm('删除这场考试？')) return;
@@ -549,6 +630,7 @@ container.addEventListener('change', event => {
   }
   const form = control.form;
   if (!form || (!data && !legacySnapshot)) return;
+  if (['assessment', 'exam'].includes(form.dataset.form ?? '') && ['certainty', 'kind'].includes(control.name)) assessmentFields(form);
   if (form.dataset.form === 'filter') {
     const fields = new FormData(form);
     filters = { week: read(fields, 'week'), track: read(fields, 'track'),
@@ -635,6 +717,11 @@ try {
     }
   }, 1000);
   render();
+  const showSchedule = () => {
+    if (location.hash === '#study-exams') updateView('plan', 'study-exams');
+  };
+  showSchedule();
+  window.addEventListener('hashchange', showSchedule);
 } catch (error) {
   report(error);
   if (error instanceof LegacyStudyUpgradeError) {

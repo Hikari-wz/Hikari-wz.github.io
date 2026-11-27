@@ -2,19 +2,17 @@ import { escape as e, options, subjectName } from '../study/views.ts';
 import { duration, localClock, monday, shiftDay } from '../study/time.ts';
 import { apportion, baselineAt, recentExam, recommend, scheduleOf, stageAt, stageNames, weeklyAllocation } from './allocation.ts';
 import { blankCourse, inTerm, inputsOf, outsideId, reserveId,
-  type Assessment, type Course, type DeskData, type Material, type Result, type Route, type Term, type Vector } from './model.ts';
+  type Course, type DeskData, type Material, type Result, type Route, type Term, type Vector } from './model.ts';
 import { normalized, propose, reviewOf, targetAt } from './review.ts';
 
 const modes = { ability: '能力积累', bank: '题库应试', task: '任务完成' };
 const states = { unassessed: '未摸底', normal: '正常', strengthen: '重点补强', achieved: '阶段目标达成', completed: '考核完成' };
-const kinds = { exam: '考试', assignment: '作业', online: '线上学习', oral: '口语', diagnostic: '摸底', preparation: '准备' };
 const statuses = { scheduled: '待处理', completed: '已完成', cancelled: '已取消' };
-const certainty = { confirmed: '确定', tentative: '暂定', unknown: '未定' };
 const uses = { unused: '未使用', practice: '专项训练', sealed: '封存', mocked: '已模拟' };
 const conditions = { unknown: '未知', independent: '独立', materials: '允许资料', assisted: '受提示或 AI 辅助' };
 const attempts = { unknown: '未知', first: '首次', repeat: '重做' };
 const metrics = { score: '得分', independent: '独立练习', count: '正确数', coverage: '覆盖进度', done: '完成', official: '正式成绩归档' };
-const tags = ['公式提取', '运算化简', '题型识别', '借助提示', '粗心', '时间不足', '程序追踪', '题库记忆'];
+export const resultTags = ['公式提取', '运算化简', '题型识别', '借助提示', '粗心', '时间不足', '程序追踪', '题库记忆'];
 
 const html = String.raw;
 const card = (title: string, body: string) => html`<section class="study-card"><h2>${e(title)}</h2>${body}</section>`;
@@ -31,8 +29,6 @@ const select = (name: string, label: string, values: Record<string, string>, val
   html`<label>${e(label)}<select name="${e(name)}">${options(values, value)}</select></label>`;
 const check = (name: string, label: string, on: boolean) =>
   html`<label><input type="checkbox" name="${e(name)}" ${on ? 'checked' : ''}> ${e(label)}</label>`;
-const textarea = (name: string, label: string, value = '') =>
-  html`<label>${e(label)}<textarea name="${e(name)}" maxlength="2000" rows="2">${e(value)}</textarea></label>`;
 const dates = (from = '', through = '', required = false) => input('from', '开始日', from, 'type="date"' + (required ? ' required' : '')) +
   input('through', '结束日（含）', through, 'type="date"' + (required ? ' required' : ''));
 const percent = (ratio: number | null | undefined) => ratio == null ? '—' : `${Math.round(ratio * 100)}%`;
@@ -48,44 +44,59 @@ const subjectLabel = (data: DeskData, id: string) => id === reserveId ? subjectN
   id === outsideId ? '学期范围外' : subjectName(data, id);
 const subject = (data: DeskData, value = '') => select('subjectId', '课程', schoolOptions(data), value);
 
-function table(data: DeskData, minutes: Vector, target: Vector, total: number, budget: number | null) {
+function courseProgress(data: DeskData, minutes: Vector, target: Vector, total: number, budget: number | null) {
   const actual = total ? apportion(Object.fromEntries(Object.entries(minutes).map(([id, value]) => [id, value / total])), 100) : {};
   const planned = apportion(target, 100);
   const budgetMinutes = budget !== null ? apportion(target, budget) : {};
   const ids = [...new Set([...Object.keys(target), ...Object.keys(minutes).map(id => id === data.academic.otherId ? reserveId : id)])];
-  if (!ids.length) return '<p>暂无课内记录和有效分配。配置课程后即可查看目标。</p>';
-  return html`<table class="academic-table"><thead><tr><th scope="col">课程</th><th scope="col">实际</th>
-    <th scope="col">实际占比</th><th scope="col">目标</th>${budget !== null ? '<th scope="col">计划</th>' : ''}
-    </tr></thead><tbody>${ids.map(id => {
-      const actualId = id === reserveId ? data.academic.otherId : id;
-      return `<tr><th scope="row">${e(subjectLabel(data, id))}</th><td>${minutes[actualId] ?? 0} 分</td>
-        <td>${total ? (actual[actualId] ?? 0) + '%' : '—'}</td><td>${Object.hasOwn(planned, id) ? planned[id] + '%' : '—'}</td>
-        ${budget !== null ? '<td>' + (Object.hasOwn(budgetMinutes, id) ? budgetMinutes[id] + ' 分' : '—') + '</td>' : ''}</tr>`;
-    }).join('')}</tbody></table>`;
+  if (!ids.length) return '<p>暂无课内记录和有效分配。</p>';
+  return '<ul class="academic-progress">' + ids.map(id => {
+    const actualId = id === reserveId ? data.academic.otherId : id;
+    const name = e(subjectLabel(data, id));
+    const done = minutes[actualId] ?? 0;
+    const plan = budgetMinutes[id];
+    const color = [...id].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 0) % 3;
+    const completion = plan > 0 ? ' · 完成 ' + percent(done / plan) : '';
+    const over = plan !== undefined && done > plan ? ' · 超出 ' + duration(done - plan) : '';
+    const meter = plan > 0 || (plan === 0 && done > 0) ?
+      `<meter aria-label="${name}计划完成进度" min="0" max="${plan || 1}" value="${plan ? Math.min(done, plan) : 1}"></meter>` : '';
+    return `<li class="study-progress" data-track="${['school', 'self', 'project'][color]}">
+      <div class="study-between"><span class="study-track-name">${name}</span><strong>${duration(done)} / ${plan === undefined ? '未设计划' : duration(plan)}</strong></div>
+      ${meter}<small>实际占比 ${total ? (actual[actualId] ?? 0) + '%' : '—'} · 目标占比 ${Object.hasOwn(planned, id) ? planned[id] + '%' : '—'}${completion}${over}</small>
+    </li>`;
+  }).join('') + '</ul>';
 }
 
 export function home(data: DeskData, term: Term, now: number) {
   const clock = localClock(now, data.settings.timezone);
-  const { stage, route } = stageAt(inputsOf(data), term, clock);
+  const inputs = inputsOf(data);
+  const { stage, route } = stageAt(inputs, term, clock);
   const target = targetAt(data, term, now);
   const summary = weeklyAllocation(data, term, monday(clock.day), clock, target);
   const next = recommend(data, term, clock, target);
   const exam = recentExam(data, term, clock);
-  return html`<section class="study-card academic-hero">
-    <div class="academic-meta"><p>${e(term.name)}</p><p>${stageNames[stage]}${route?.label ? ' · ' + e(route.label) : ''}</p></div>
+  const urgent = next?.code === 'deadline' ? scheduleOf(inputs, term).find(row => row.id === next.evidenceId) : undefined;
+  const focus = data.academic.next?.termId === term.id && data.academic.next.day === clock.day ? data.academic.next : null;
+  const choices = Object.fromEntries(baselineAt(inputs, term, clock, data.academic.otherId).courses
+    .filter(item => item.eligible).map(({ course }) => [course.subjectId, subjectName(data, course.subjectId)]));
+  return card('下一步', next ? `<h3>${e(subjectLabel(data, next.subjectId))} · ${e(next.action)}</h3>
+    ${next.minutes ? '<p>建议 ' + next.minutes + ' 分钟</p>' : ''}
+    ${panel('建议详情', '<p>' + e(next.reason) + '</p>', 'next-reason')}` :
+    `<p>${focus?.defer ? '今日已暂缓常规建议。' : stage === 'vacation' ? '休息中，当前没有急项。' : '当前没有需要优先安排的课程。'}</p>`) +
+  card(urgent ? '急项' : '最近考核', `<p>${urgent ? e(urgent.title) + ' · ' + e(urgent.day) :
+    exam ? e(exam.title) + ' · ' + (exam.distance ? exam.distance + ' 天后' : '今天') : '暂无已确定的待考事项'}
+    ${term.examWeek ? ' · 预计考试周 ' + e(term.examWeek) : ''}</p>
+    <a class="study-action" href="/desk/study/#study-exams">查看考试与任务</a>`) +
+  card('本周分配', `<div class="academic-meta"><p>${e(term.name)}</p><p>${stageNames[stage]}${route?.label ? ' · ' + e(route.label) : ''}</p></div>
     <p class="academic-metric" data-academic-total>${duration(summary.total)}</p>
     <p>本周课内投入${summary.budget === null ? ' · Study 尚无周预算' : ' · A 轨计划 ' + duration(summary.budget) +
-      (summary.rate === null ? '' : ' · 完成 ' + percent(summary.rate)) + ' · 余量 ' + duration(summary.remaining!)}${summary.budget !== null && summary.total > summary.budget ? ' · 已超计划' : ''}</p>
-    <p>${exam ? '最近考试 · ' + e(exam.title) + ' · ' + (exam.distance ? exam.distance + ' 天后' : '今天') : '暂无已确定的待考考试'}
-      ${term.examWeek ? ' · 预计考试周 ' + e(term.examWeek) : ''}</p>
-  </section>
-  ${card('下一步', next ? `<h3>${e(subjectLabel(data, next.subjectId))} · ${e(next.action)}</h3><p>${e(next.reason)}
-    ${next.minutes ? ' · 建议 ' + next.minutes + ' 分钟' : ''}</p>` :
-    `<p>${stage === 'vacation' ? '休息中，当前没有急项。' : '当前没有需要优先安排的课程。'}</p>`)}
-  ${card('本周分配', table(data, summary.minutes, target, summary.total, summary.budget) +
-    (summary.crowded && stage !== 'vacation' ? '<p>其他及暂不参与分配的课次占用较多。</p>' : ''))}
-  ${card('今日重点', panel('选择其他重点或暂缓', form('next', term.id, subject(data, data.academic.next?.subjectId) +
-    textarea('action', '今日行动', data.academic.next?.action) + check('defer', '今天暂缓常规建议', data.academic.next?.defer ?? false) + '<p>留空且取消暂缓可恢复自动建议。已确认的急项会优先显示。</p>'), 'next'))}`;
+      (summary.rate === null ? '' : ' · 完成 ' + percent(summary.rate)) + ' · 余量 ' + duration(summary.remaining!)}${summary.budget !== null && summary.total > summary.budget ? ' · 已超计划' : ''}</p>` +
+    courseProgress(data, summary.minutes, target, summary.total, summary.budget) +
+    (summary.crowded && stage !== 'vacation' ? '<p>其他及暂不参与分配的课次占用较多。</p>' : '') +
+    (!term.courses.length ? '<button class="study-action" type="button" data-view="courses">配置课程</button>' : '')) +
+  (Object.keys(choices).length ? card('今日重点', panel('调整今日重点', '<form data-form="next" data-id="' + e(term.id) + '">' +
+    select('choice', '今日重点', { auto: '恢复自动建议', defer: '今天暂缓', change: '换一门课' }, focus?.defer ? 'defer' : focus ? 'change' : 'auto') +
+    '<div data-focus-course>' + select('subjectId', '课程', { '': '请选择', ...choices }, focus?.subjectId) + '</div></form>', 'next')) : '');
 }
 
 function courseForm(data: DeskData, course: Course) {
@@ -94,8 +105,6 @@ function courseForm(data: DeskData, course: Course) {
     select('mode', '课程模式', modes, course.mode) + select('status', '状态', states, course.status) +
     select('activation', '参与分配', { auto: '按日期和模式', on: '已激活', off: '待激活' }, course.activation) +
     dates(course.from, course.through) + check('disabled', '本学期停用', course.disabled) + check('archived', '归档共享科目', subjectRow.archived)) +
-    textarea('strategy', '课程策略', course.strategy) + grid(input('focus', '本周重点', course.focus) +
-      input('focus2', '本周重点（选填）', course.focus2)) +
     panel('分配和目标参数', grid(number('credits', '学分', course.credits ?? '', .000001, 10000) +
       number('finalShare', '期末占比（%）', toPercent(course.finalShare)) +
       number('cost', '个人成本', course.cost ?? '', .25, 2) + number('goal', '阶段目标（%）', toPercent(course.goal)) +
@@ -106,14 +115,14 @@ function courseForm(data: DeskData, course: Course) {
 function materialForm(item: Partial<Material> = {}) {
   return grid(input('title', '年份或名称', item.title, 'maxlength="120" required') +
     input('location', '位置提示', item.location, 'maxlength="2000"') +
-    select('use', '用途', uses, item.use ?? 'unused')) + textarea('note', '摸底或使用备注', item.note);
+    select('use', '用途', uses, item.use ?? 'unused'));
 }
 
 export function courses(data: DeskData, term: Term, now: number) {
   const clock = localClock(now, data.settings.timezone);
   const model = baselineAt(inputsOf(data), term, clock, data.academic.otherId);
   const stats = weeklyAllocation(data, term, monday(clock.day), clock, model.target);
-  return card('课程', data.subjects.filter(item => item.track === 'school').map(item => {
+  return card('课程管理', '<button class="study-action" data-view="settings" type="button">返回设置</button>' + data.subjects.filter(item => item.track === 'school').map(item => {
     const config = model.courses.find(entry => entry.course.subjectId === item.id);
     const course = config?.course ?? blankCourse(item.id);
     const recent = data.academic.results.filter(result => result.termId === term.id && result.subjectId === item.id)
@@ -123,6 +132,7 @@ export function courses(data: DeskData, term: Term, now: number) {
       config?.exam && config.due <= 3 ? '临近考试' : config?.active ? states[course.status] : config ? '暂不分配' : '待配置';
     const aliases = [...new Set(data.academic.aliases.filter(alias => alias.subjectId === item.id).map(alias => alias.name))];
     return panel(item.name + ' · ' + status,
+      (course.strategy || course.focus || course.focus2 ? panel('旧课程策略与重点', list([course.strategy, course.focus, course.focus2].filter(Boolean).map(e)), 'legacy-course-' + item.id) : '') +
       (aliases.length ? '<p>历史名称 · ' + e(aliases.join('、')) + '</p>' : '') +
       (stats.days.get(item.id)?.size === 1 && stats.minutes[item.id] >= 90 ? '<p>本周投入集中在一天，可分散下一次训练。</p>' : '') +
       courseForm(data, course) +
@@ -133,44 +143,21 @@ export function courses(data: DeskData, term: Term, now: number) {
       panel('资料索引', (index.length === 6 || index.length === 7 ?
         '<p>可留一套摸底、' + (index.length - 3) + ' 套专项、两套封存。优先考虑封存最近两套。</p>' : '') +
         index.map(row => panel(row.title + ' · ' + uses[row.use],
-          form('material', row.id, materialForm(row)) + button('删除索引', 'delete-material', row.id), 'material-' + row.id)).join('') +
+          (row.note ? '<p>' + e(row.note) + '</p>' : '') + form('material', row.id, materialForm(row)) + button('删除索引', 'delete-material', row.id), 'material-' + row.id)).join('') +
         panel('添加资料', form('material-add', item.id, materialForm()), 'material-new-' + item.id), 'materials-' + item.id),
       'course-' + item.id);
   }).join('') + panel('新增共享科目', form('subject-add', '', input('name', '课程名称', '', 'maxlength="120" required')), 'subject-new'));
 }
 
-function assessmentForm(data: DeskData, item: Partial<Assessment> = {}) {
-  const exam = data.exams.find(row => row.id === item.examId);
-  return grid(subject(data, item.subjectId) + input('title', '标题', item.title, 'maxlength="120" required') +
-    select('kind', '类型', kinds, item.kind ?? 'assignment') + select('certainty', '日期状态', certainty, item.certainty ?? 'confirmed') +
-    select('status', '办理状态', statuses, item.status ?? 'scheduled') +
-    dateInput('day', '截止日或考试日', item.day) + input('time', '截止时刻', item.time, 'type="time"') +
-    dateInput('prepare', '准备起日（选填）', item.prepare) + check('required', '必需考核', item.required ?? false)) +
-    panel('正式共享考试', grid(input('start', '考试开始', exam?.start, 'type="time"') +
-      input('end', '考试结束', exam?.end, 'type="time"') +
-      select('importance', 'Study 重要性', { important: '重要', normal: '普通', low: '低' }, exam?.importance ?? 'normal')) +
-      '<p>保存确定的考试会编辑 Study 同一场考试，可能改变今后的自动阶段与预算试算。</p>', 'exam-option-' + (item.id ?? 'new'));
-}
 const routeForm = (route: Partial<Route> = {}) => grid(dates(route.from, route.through, true) +
-  select('stage', '训练阶段', stageNames, route.stage ?? 'normal') + input('label', '阶段标签', route.label)) +
-  textarea('focus', '阶段重点', route.focus);
-export function schedule(data: DeskData, term: Term, now: number) {
-  const clock = localClock(now, data.settings.timezone);
-  const items = scheduleOf(inputsOf(data), term);
-  const practical = items.map(item => {
-    const expired = item.kind === 'exam' && item.status === 'scheduled' && item.certainty === 'confirmed' &&
-      (item.day < clock.day || item.day === clock.day && clock.minute >= item.cutoff);
-    const label = [item.title, item.day || '日期未填', certainty[item.certainty], expired ? '待更新' : statuses[item.status]].join(' · ');
-    return panel(label, form('assessment', item.id, assessmentForm(data, { ...item, examId: item.examId })) +
-      button('删除此项', 'delete-assessment', item.id), 'due-' + item.id);
-  }).join('');
-  return card('考试与任务', practical + panel('新增考试或任务', form('assessment', '', assessmentForm(data)), 'new-assessment')) +
-    card('复习路线', '<p>阶段影响训练行为。题库课和任务课仍按自身窗口参与分配。</p>' +
-      form('stage', term.id, grid(select('override', '手动阶段', { '': '随日期与 Study', ...stageNames }, term.override) +
-        dateInput('examWeek', '预计考试周（周一）', term.examWeek))) +
-      term.routes.map(route => panel(route.label || stageNames[route.stage], '<p>' + e(route.focus) + '</p>' +
-        form('route', route.id, routeForm(route)) + button('移除区间', 'delete-route', route.id), 'route-' + route.id)).join('') +
-      panel('新增阶段或休息区间', form('route', '', routeForm()), 'new-route'));
+  select('stage', '训练阶段', stageNames, route.stage ?? 'normal'));
+
+function studyRoute(term: Term) {
+  return panel('复习路线', form('stage', term.id, grid(select('override', '手动阶段', { '': '随日期与 Study', ...stageNames }, term.override) +
+    dateInput('examWeek', '预计考试周（周一）', term.examWeek))) +
+    term.routes.map(route => panel(route.label || stageNames[route.stage], (route.focus ? '<p>' + e(route.focus) + '</p>' : '') +
+      form('route', route.id, routeForm(route)) + button('移除区间', 'delete-route', route.id), 'route-' + route.id)).join('') +
+    panel('新增阶段或休息区间', form('route', '', routeForm()), 'new-route'), 'study-route');
 }
 
 export function resultActivities(data: DeskData, term: Term, id: string) {
@@ -182,6 +169,25 @@ export function resultActivities(data: DeskData, term: Term, id: string) {
   else if (/英语/.test(name)) labels = ['阅读', '听力', '词汇', '翻译', '写作', '历年卷'];
   else if (/程序|^C\s*语言/.test(name)) labels = ['程序阅读', '知识点练习', '独立练习', '历年卷'];
   return labels;
+}
+
+export function resultChoices(data: DeskData, term: Term, subjectId: string) {
+  const old = data.academic.results.filter(row => row.subjectId === subjectId);
+  return {
+    activities: [...new Set([...resultActivities(data, term, subjectId), ...old.map(row => row.activity)])],
+    scopes: [...new Set(['整卷', '全题库', ...Array.from({ length: 20 }, (_, index) => '第' + (index + 1) + '章'),
+      ...data.academic.materials.filter(row => row.subjectId === subjectId).map(row => row.title),
+      ...old.map(row => row.scope).filter(Boolean)])],
+    difficulties: { foundation: '基础', standard: '标准', advanced: '进阶',
+      ...Object.fromEntries(old.map(row => row.difficulty).filter(key => key && !['foundation', 'standard', 'advanced'].includes(key)).map(key => [key, key])) },
+  };
+}
+
+export function defaultMetric(activity: string, term: Term, subjectId: string): Result['metric'] {
+  if (activity === '独立练习') return 'independent';
+  if (activity === '题库覆盖') return 'coverage';
+  if (term.courses.find(course => course.subjectId === subjectId)?.mode === 'task') return 'done';
+  return 'score';
 }
 
 const resultLabel = (item: Result) => e(item.activity) + ' · ' + e(item.day) + ' · ' +
@@ -197,18 +203,21 @@ export function results(data: DeskData, term: Term, today: string, prefill: stri
     .sort((a, b) => b.day.localeCompare(a.day)).map(session =>
       [session.id, session.day + ' · ' + subjectName(data, session.subjectId) + ' · ' + session.minutes + ' 分']));
   const activity = item?.activity ?? recent?.activity ?? resultActivities(data, term, id)[0];
-  const metric = item?.metric ?? recent?.metric ?? (term.courses.find(course => course.subjectId === id)?.mode === 'task' ? 'done' : 'score');
+  const metric = item?.metric ?? (recent?.activity === activity ? recent.metric : defaultMetric(activity, term, id));
+  const choices = resultChoices(data, term, id);
+  const toOptions = (items: string[]) => Object.fromEntries(items.map(label => [label, label]));
   return card(item ? '编辑成果' : '录入成果',
-    form('result', item?.id ?? '', grid(subject(data, id) + input('activity', '活动', activity, 'list="academic-activities" maxlength="120" required') +
-      '<datalist id="academic-activities">' + resultActivities(data, term, id).map(label => '<option value="' + e(label) + '">').join('') + '</datalist>' +
-      select('metric', '结果类型', metrics, metric) + dateInput('day', '日期', item?.day ?? today)) +
+    form('result', item?.id ?? '', grid(subject(data, id) + select('activity', '活动', toOptions(choices.activities), activity)) +
       '<div class="academic-grid" data-metric-values>' +
-      number('value', '实得', item?.value ?? '', 0, 100000) + number('total', '满分或总量', item?.total ?? '', 0, 100000) +
+      number('value', '实得', item?.value ?? '', 0, 100000) + number('total', '满分或总量', item?.total ?? (metric === 'score' || metric === 'official' ? 100 : ''), 0, 100000) +
       '<div data-prompted>' + number('prompted', '提示后正确（选填）', item?.prompted ?? '', 0, 100000) + '</div></div>' +
-      panel('可比条件、课次与备注', grid(select('sessionId', '关联已保存课次', { '': '不关联', ...sessionOptions }, item?.sessionId) +
-        input('scope', '范围或题库', item?.scope) + select('difficulty', '难度', { '': '未分组', foundation: '基础', standard: '标准', advanced: '进阶' }, item?.difficulty) +
+      '<p class="study-muted">只填结果也能保存；补齐可比条件后，才可能参与周报趋势和分配建议。</p>' +
+      panel('可比条件与错因', grid(select('scope', '范围或题库', { '': '未分组', ...toOptions(choices.scopes) }, item?.scope) +
+        select('difficulty', '难度', { '': '未分组', ...choices.difficulties }, item?.difficulty) +
         select('condition', '作答条件', conditions, item?.condition ?? 'unknown') + select('attempt', '是否见过', attempts, item?.attempt ?? 'unknown')) +
-        grid(tags.map(tag => check('tag-' + tag, tag, item?.tags.includes(tag) ?? false)).join('')) + textarea('note', '备注', item?.note), 'result-detail')) +
+        grid(resultTags.map(tag => check('tag-' + tag, tag, item?.tags.includes(tag) ?? false)).join('')), 'result-detail') +
+      panel('日期、结果类型与课次', grid(select('metric', '结果类型', metrics, metric) + dateInput('day', '日期', item?.day ?? today) +
+        select('sessionId', '关联已保存课次', { '': '不关联', ...sessionOptions }, item?.sessionId)), 'result-options')) +
     (item ? button('返回新增成果', 'result-course', id) : '')) +
     card('成果历史', list(data.academic.results.filter(row => row.termId === term.id).sort((a, b) => b.day.localeCompare(a.day) || b.at - a.at)
       .map(row => '<strong>' + e(subjectLabel(data, row.subjectId)) + '</strong> · ' + resultLabel(row) + (row.note ? '<p>' + e(row.note) + '</p>' : '') +
@@ -239,7 +248,7 @@ export function review(data: DeskData, term: Term, week: string, now: number, cl
       duration(report.total) + ' · ' + new Set(report.records.map(item => item.day)).size + ' 个学习日' +
       (report.budget === null ? ' · A 轨预算未知' : ' · A 轨计划 ' + duration(report.budget) + ' · 完成率 ' + percent(report.rate)) + '</p>' +
       (!report.history ? '<p>缺少稳定或可追溯的目标配置，投入判断证据不足。</p>' : '') +
-      table(data, report.minutes, report.history ?? {}, report.total, report.budget) +
+      courseProgress(data, report.minutes, report.history ?? {}, report.total, report.budget) +
       panel('四周投入与当周活动', list(report.trend.map(item => e(item.week) + ' · ' + (item.minutes === null ? '无记录' : duration(item.minutes)))) +
         list(Object.entries(Object.groupBy(report.results, item => item.activity)).map(([label, group]) => e(label) + ' · ' + group!.length + ' 条')) +
         list(scheduleOf(inputsOf(data), term).filter(row => row.day >= week && row.day <= report.through)
@@ -270,13 +279,18 @@ export function review(data: DeskData, term: Term, week: string, now: number, cl
 
 export function settings(data: DeskData, term: Term | undefined, now: number) {
   const clock = localClock(now, data.settings.timezone);
+  const current = data.academic.terms.find(item => item.id === data.academic.currentTerm);
+  const unassigned = current ? data.sessions.filter(item => item.subjectId === data.academic.otherId && inTerm(item.day, current)) : [];
+  const destinations = Object.fromEntries(data.subjects.filter(item =>
+    item.track === 'school' && !item.archived && item.id !== data.academic.otherId).map(item => [item.id, item.name]));
   const active = term && baselineAt(inputsOf(data), term, clock, data.academic.otherId);
   const terms = data.academic.terms.map(item => panel(item.name + (item.archived ? ' · 归档' : ''),
     form('term', item.id, grid(input('name', '名称', item.name, 'required maxlength="120"') + dates(item.from, item.through, true))) +
     '<div class="study-actions">' + (item.archived ? button('恢复学期', 'unarchive-term', item.id) :
       button('设为当前学期', 'current-term', item.id) + button('归档学期', 'archive-term', item.id)) +
     button('查看此学期', 'inspect-term', item.id) + '</div>', 'term-' + item.id)).join('');
-  return card('学期', terms + panel('新增学期', form('term', '', grid(input('name', '名称', '', 'required maxlength="120"') + dates('', '', true)),
+  return (term ? card('课程管理', '<button class="study-action" type="button" data-view="courses">打开课程管理</button>' +
+    studyRoute(term)) : '') + card('学期', terms + panel('新增学期', form('term', '', grid(input('name', '名称', '', 'required maxlength="120"') + dates('', '', true)),
     '创建学期'), 'new-term', !data.academic.terms.length)) +
     (term && active ? card('分配设置', form('reserve', term.id, number('reserve', '机动（%）', toPercent(term.reserve), 0, 20)) +
       panel('手动比例与恢复自动', Object.keys(active.weights).length ?
@@ -284,12 +298,13 @@ export function settings(data: DeskData, term: Term | undefined, now: number) {
           grid(Object.keys(active.weights).filter(id => id !== reserveId).map(id =>
             number(id, subjectLabel(data, id) + '（%）', toPercent(active.target[id])).replace('step="any"', 'step="any" required')).join('')) +
           '<p>机动 ' + percent(term.reserve) + '</p>') : '<p>配置并激活课程后可自定分配。</p>', 'manual') +
-      (term.manual ? button('恢复自动权重', 'auto', term.id) : '')) +
-    card('课次归类', form('map-session', term.id, select('sessionId', '待归类课次',
-      { '': '请选择', ...Object.fromEntries(data.sessions.filter(item => item.subjectId === data.academic.otherId && inTerm(item.day, term))
-        .map(item => [item.id, item.day + ' · ' + item.minutes + ' 分钟 · ' + item.note.slice(0, 40)])) }) +
-      subject(data) + '<p>保存前会显示原科目和新科目。</p>') +
-      '<p>整门旧课可在课程详情中核对历史名称并明确改名，稳定 ID 会保留。</p>') : '') +
+      (term.manual ? button('恢复自动权重', 'auto', term.id) : '')) : '') +
+    (current && unassigned.length ? card('整理其他课程的旧记录',
+      '<p>把之前记在「其他课程」的一条学习记录换到正确科目。学习日期和时长保持原样。</p>' +
+      form('map-session', current.id, select('sessionId', '待整理记录', { '': '请选择', ...Object.fromEntries(unassigned.map(item =>
+        [item.id, item.day + ' · ' + duration(item.minutes)])) }) +
+        select('subjectId', '目标课程', { '': '请选择', ...destinations }) +
+        '<p>保存前会确认原科目、新科目、日期和时长。</p>')) : '') +
     card('本地备份', '<p>Study 和 Academic 共用当前站点、同一浏览器存储分区的记录。备份包含隐私数据，可主动转移到另一设备。此浏览器及同源脚本可访问这些数据。</p>' +
       '<div class="study-actions">' + button('导出完整 JSON', 'export') + button('选择备份恢复', 'import') +
       '</div><input type="file" accept=".json,application/json" data-backup-file hidden>');

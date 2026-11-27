@@ -52,7 +52,10 @@ export interface Assessment {
   kind: 'exam' | 'assignment' | 'online' | 'oral' | 'diagnostic' | 'preparation';
   certainty: 'confirmed' | 'tentative' | 'unknown'; status: Exam['status'];
   day: string; time: string; prepare: string; required: boolean;
+  // Study-specific details survive while the assessment has no formal exam.
+  examDraft?: Pick<Exam, 'id' | 'start' | 'importance' | 'mastery' | 'note' | 'closedAt'>;
 }
+export const assessmentScheduleId = (item: Assessment) => item.examId || item.examDraft?.id || item.id;
 export interface Result {
   id: string; termId: string; subjectId: string; sessionId: string;
   day: string; at: number; activity: string; metric: typeof metrics[number];

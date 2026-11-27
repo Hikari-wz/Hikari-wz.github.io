@@ -1,17 +1,16 @@
 import { channelName, exportBackupBlob, importBackupFile, openStudyRepository, requireCurrent, same, type StudyRepository } from '../study/storage.ts';
 import { localClock, monday, validDay } from '../study/time.ts';
-import type { Exam } from '../study/model.ts';
 import { baselineAt, scheduleOf } from './allocation.ts';
-import { blankCourse, currentTerm, inTerm, inputsOf, reserveId, type Assessment,
+import { blankCourse, currentTerm, inTerm, inputsOf, reserveId,
   type Course, type DeskData, type Material, type Result, type Route, type Stage, type Term, type Vector } from './model.ts';
 import { recordDecision } from './review.ts';
 import { vector } from './validation.ts';
-import { courses, home, resultActivities, results, review, schedule, settings } from './views.ts';
+import { courses, defaultMetric, home, resultChoices, resultTags, results, review, settings } from './views.ts';
 
 const root = document.querySelector<HTMLElement>('#academic')!;
 const content = root.querySelector<HTMLElement>('[data-academic-content]')!;
 const status = root.querySelector<HTMLElement>('[data-academic-status]')!;
-const views = ['home', 'courses', 'schedule', 'results', 'review', 'settings'] as const;
+const views = ['home', 'courses', 'results', 'review', 'settings'] as const;
 type View = typeof views[number];
 let repository: StudyRepository | undefined;
 let data: DeskData;
@@ -25,6 +24,7 @@ let preview: ReturnType<typeof review>['preview'];
 let dirty = false;
 let busy = false;
 let pending = false;
+let refreshing = false;
 let refreshedAt = 0;
 let channel: BroadcastChannel | undefined;
 const termOf = (state: DeskData) => inspect ? state.academic.terms.find(term => term.id === inspect) : currentTerm(state);
@@ -51,6 +51,14 @@ function resultFields(form: HTMLFormElement) {
   total.parentElement!.firstChild!.textContent = ['independent', 'count'].includes(metric) ? '总题数' : metric === 'coverage' ? '题库总量' : '满分';
 }
 
+function focusFields(choice: HTMLSelectElement) {
+  const target = choice.form!.querySelector<HTMLElement>('[data-focus-course]')!;
+  target.hidden = choice.value !== 'change';
+  const course = target.querySelector('select')!;
+  course.disabled = target.hidden;
+  course.required = !target.hidden;
+}
+
 function render(reset = false) {
   const keep = reset ? [] : [...content.querySelectorAll<HTMLDetailsElement>('details[data-keep][open]')].map(item => item.dataset.keep);
   const term = termOf(data);
@@ -59,12 +67,11 @@ function render(reset = false) {
   if (view === 'settings') content.innerHTML = settings(data, term, now);
   else if (!term) {
     content.innerHTML = '<section class="study-card"><h2>开始使用</h2><p>在设置中创建或选定学期。Study 的历史已在当前浏览器共享。</p>' +
-      '<button type="button" class="study-action primary" data-view="settings">前往设置</button></section>';
+      '<button type="button" class="study-action primary" data-view="settings">配置课程</button></section>';
   } else {
     switch (view) {
       case 'home': content.innerHTML = home(data, term, now); break;
       case 'courses': content.innerHTML = courses(data, term, now); break;
-      case 'schedule': content.innerHTML = schedule(data, term, now); break;
       case 'results': content.innerHTML = results(data, term, clock().day, prefill, editing); break;
       case 'review': {
         const report = review(data, term, reportWeek || monday(clock().day), now, closed);
@@ -84,6 +91,8 @@ function render(reset = false) {
   });
   const result = content.querySelector<HTMLFormElement>('form[data-form="result"]');
   if (result) resultFields(result);
+  const choice = content.querySelector<HTMLSelectElement>('form[data-form="next"] [name="choice"]');
+  if (choice) focusFields(choice);
   refreshedAt = now;
 }
 function go(target: View) {
@@ -107,7 +116,7 @@ function editRow<T>({ rows, original, identify }: Row<T>, id: string, value?: T)
   else rows[index] = value;
 }
 const itemId = (item: { id: string }) => item.id;
-const rows = <K extends 'assessments' | 'results' | 'materials'>(state: DeskData, key: K) =>
+const rows = <K extends 'results' | 'materials'>(state: DeskData, key: K) =>
   ({ rows: state.academic[key], original: data.academic[key], identify: itemId });
 function activeTerm(state: DeskData, expected: Term | undefined): Term {
   const actual = termOf(state);
@@ -200,6 +209,17 @@ async function save(form: HTMLFormElement) {
       state.subjects.push({ id: uuid(), name: read('name'), track: 'school', archived: false });
       return;
     }
+    if (kind === 'map-session') {
+      const term = currentTerm(state);
+      if (!term || term.id !== id) throw new Error('当前学期已变更，请重新打开设置。');
+      const existing = data.sessions.find(item => item.id === read('sessionId'));
+      const record = state.sessions.find(item => item.id === read('sessionId'));
+      requireCurrent(record, existing);
+      if (!record || record.subjectId !== academic.otherId || !inTerm(record.day, term)) throw new Error('请选择一条待归类课次。');
+      if (!state.subjects.some(item => item.id === read('subjectId') && item.id !== academic.otherId && !item.archived && item.track === 'school')) throw new Error('请选择当前可用的校内科目。');
+      record.subjectId = read('subjectId');
+      return;
+    }
     const term = activeTerm(state, current);
     const termUpdate = () => requireCurrent(term, current);
     switch (kind) {
@@ -213,8 +233,7 @@ async function save(form: HTMLFormElement) {
           ...old, mode: read('mode') as Course['mode'], status: read('status') as Course['status'],
           activation: read('activation') as Course['activation'], disabled: fields.has('disabled'),
           credits: num('credits'), finalShare: ratio('finalShare'), cost: num('cost'), goal: ratio('goal'),
-          coverageGoal: ratio('coverageGoal'), from: read('from'), through: read('through'), strategy: read('strategy'),
-          focus: read('focus'), focus2: read('focus2'),
+          coverageGoal: ratio('coverageGoal'), from: read('from'), through: read('through'),
         };
         editRow({ rows: term.courses, original: current!.courses, identify: item => item.subjectId }, id, next);
         if (subject.name !== read('name')) academic.aliases.push({ subjectId: id, name: subject.name });
@@ -230,55 +249,27 @@ async function save(form: HTMLFormElement) {
         break;
       case 'route': {
         const route: Route = { id: id || uuid(), from: read('from'), through: read('through'),
-          stage: read('stage') as Stage, label: read('label'), focus: read('focus') };
+          stage: read('stage') as Stage, label: current!.routes.find(item => item.id === id)?.label ?? '',
+          focus: current!.routes.find(item => item.id === id)?.focus ?? '' };
         if (term.routes.some(item => item.id !== route.id && item.stage !== 'vacation' && route.stage !== 'vacation' &&
           item.from <= route.through && route.from <= item.through)) throw new Error('训练阶段的日期不能重叠。');
         editRow({ rows: term.routes, original: current!.routes, identify: itemId }, route.id, route);
         break;
       }
-      case 'assessment': {
-        const original = scheduleOf(inputsOf(data), current!).find(row => row.id === id);
-        const latest = scheduleOf(inputsOf(state), term).find(row => row.id === id);
-        requireCurrent(latest, original);
-        const metadata = academic.assessments.find(item => item.id === id || item.examId && item.examId === id);
-        const row: Assessment = {
-          id: metadata?.id || id || uuid(), termId: term.id, subjectId: read('subjectId'), examId: '',
-          title: read('title'), kind: read('kind') as Assessment['kind'], certainty: read('certainty') as Assessment['certainty'],
-          status: read('status') as Assessment['status'], day: read('day'), time: read('time'), prepare: read('prepare'),
-          required: fields.has('required'),
-        };
-        if (row.certainty === 'unknown') row.day = '';
-        if (row.kind === 'exam' && row.certainty === 'confirmed') {
-          row.examId = original?.examId || uuid();
-          const previous = data.exams.find(exam => exam.id === row.examId);
-          const exam: Exam = {
-            id: row.examId, subjectId: row.subjectId, name: row.title, day: row.day,
-            start: read('start'), end: read('end') || row.time, importance: read('importance') as Exam['importance'],
-            mastery: previous?.mastery ?? 'new', status: row.status, note: previous?.note ?? '',
-          };
-          if (row.status === 'completed') exam.closedAt = previous?.closedAt ?? now;
-          editRow({ rows: state.exams, original: data.exams, identify: itemId }, exam.id, exam);
-        } else if (original?.examId) {
-          editRow({ rows: state.exams, original: data.exams, identify: itemId }, original.examId);
-        }
-        editRow(rows(state, 'assessments'), row.id, row);
-        break;
-      }
       case 'result': {
         if (!validDay(read('day')) || !inTerm(read('day'), term) || read('day') > clock().day) throw new Error('成果日期必须在该学期内，且不晚于今天。');
         const metric = read('metric') as Result['metric'];
+        const previous = data.academic.results.find(item => item.id === id);
         const row: Result = {
           id: id || uuid(), termId: term.id, subjectId: read('subjectId'), sessionId: read('sessionId'),
-          day: read('day'), at: now, activity: read('activity'), metric,
+          day: read('day'), at: now, activity: String(fields.get('activity') ?? ''), metric,
           value: metric === 'done' ? null : num('value'), total: metric === 'done' ? null : num('total'),
           prompted: metric === 'independent' ? num('prompted') : null,
-          scope: read('scope'), difficulty: read('difficulty'), condition: read('condition') as Result['condition'],
-          attempt: read('attempt') as Result['attempt'], tags: [...fields.keys()].filter(key => key.startsWith('tag-')).map(key => key.slice(4)), note: read('note'),
+          scope: String(fields.get('scope') ?? ''), difficulty: String(fields.get('difficulty') ?? ''), condition: read('condition') as Result['condition'],
+          attempt: read('attempt') as Result['attempt'], tags: [...(previous?.tags.filter(tag => !resultTags.includes(tag)) ?? []),
+            ...resultTags.filter(tag => fields.has('tag-' + tag))], note: previous?.note ?? '',
         };
-        if (id) {
-          const previous = data.academic.results.find(item => item.id === id);
-          row.at = previous?.at ?? now;
-        }
+        row.at = previous?.at ?? now;
         if (row.metric !== 'done' && (row.value === null || !row.total || row.value + (row.prompted ?? 0) > row.total)) {
           throw new Error('请填写正数总量。独立正确和提示后正确的合计不能超过总量。');
         }
@@ -290,7 +281,7 @@ async function save(form: HTMLFormElement) {
         const original = kind === 'material' ? data.academic.materials.find(item => item.id === id) : undefined;
         const row: Material = {
           id: original?.id ?? uuid(), termId: term.id, subjectId: original?.subjectId ?? id,
-          title: read('title'), location: read('location'), use: read('use') as Material['use'], note: read('note'),
+          title: read('title'), location: read('location'), use: read('use') as Material['use'], note: original?.note ?? '',
         };
         editRow(rows(state, 'materials'), row.id, row);
         break;
@@ -310,20 +301,16 @@ async function save(form: HTMLFormElement) {
         term.manual = proposed;
         break;
       }
-      case 'next':
+      case 'next': {
         requireCurrent(academic.next, data.academic.next);
-        academic.next = read('action') || fields.has('defer') ? { termId: term.id, day: clock().day,
-          subjectId: read('subjectId'), action: read('action'), defer: fields.has('defer') } : null;
-        break;
-      case 'map-session': {
-        const existing = data.sessions.find(item => item.id === read('sessionId'));
-        const record = state.sessions.find(item => item.id === read('sessionId'));
-        requireCurrent(record, existing);
-        if (!record || record.subjectId !== academic.otherId || !inTerm(record.day, term)) throw new Error('请选择一条待归类课次。');
-        if (!state.subjects.some(item => item.id === read('subjectId') && !item.archived && item.track === 'school')) throw new Error('请选择当前可用的校内科目。');
-        record.subjectId = read('subjectId');
+        const choice = read('choice');
+        const subjectId = read('subjectId');
+        if (choice === 'change' && !term.courses.some(item => item.subjectId === subjectId)) throw new Error('请选择一门课程。');
+        academic.next = choice === 'auto' ? null : { termId: term.id, day: clock().day,
+          subjectId: choice === 'defer' ? academic.otherId : subjectId, action: academic.next?.action || '按当前阶段安排', defer: choice === 'defer' };
         break;
       }
+
     }
   });
   if (kind === 'term' && !id) {
@@ -374,8 +361,6 @@ async function action(button: HTMLButtonElement) {
   }
   if (kind?.startsWith('delete') && !confirm('删除此项？')) return;
   if (kind === 'archive-term' && !confirm('归档该学期并保留历史？')) return;
-  if (kind === 'delete-assessment' && data.exams.some(item => item.id === id) &&
-      !confirm('这会删除 Study 中同一场共享考试。继续？')) return;
   const term = termOf(data);
   await commit((state, now) => {
     const academic = state.academic;
@@ -401,12 +386,6 @@ async function action(button: HTMLButtonElement) {
       case 'delete-route':
         editRow({ rows: latest.routes, original: term!.routes, identify: itemId }, id);
         break;
-      case 'delete-assessment': {
-        const row = academic.assessments.find(item => item.id === id || item.examId === id);
-        if (row) editRow(rows(state, 'assessments'), row.id);
-        if (data.exams.some(item => item.id === id)) editRow({ rows: state.exams, original: data.exams, identify: itemId }, id);
-        break;
-      }
       case 'delete-result':
         editRow(rows(state, 'results'), id);
         if (editing === id) editing = '';
@@ -467,9 +446,6 @@ root.addEventListener('submit', event => {
     if (record && subject && !confirm(record.day + ' · ' + record.minutes + ' 分钟：' +
       (data.subjects.find(item => item.id === record.subjectId)?.name ?? '') + ' → ' + subject.name + '。确认归类？')) return;
   }
-  if (form.dataset.form === 'assessment' && (fields.get('kind') === 'exam' && fields.get('certainty') === 'confirmed' ||
-      data.exams.some(item => item.id === form.dataset.id)) &&
-      !confirm('保存会修改共享考试，也可能改变 Study 后续自动阶段和预算试算。继续？')) return;
   void run(() => save(form));
 });
 root.addEventListener('input', event => {
@@ -493,10 +469,17 @@ root.addEventListener('change', event => {
     return;
   }
   const form = control.form;
+  if (form?.dataset.form === 'next') {
+    const choice = form.elements.namedItem('choice') as HTMLSelectElement;
+    focusFields(choice);
+    if (choice.value !== 'change' || control.name === 'subjectId' && control.value) void run(() => save(form));
+    return;
+  }
   const term = repository && termOf(data);
   if (form?.dataset.form !== 'result' || !term) return;
   const fields = form.elements;
   const previousSubject = (fields.namedItem('subjectId') as HTMLSelectElement).value;
+  const previousMetric = (fields.namedItem('metric') as HTMLSelectElement).value;
   if (control.name === 'sessionId' && control.value) {
     const record = data.sessions.find(item => item.id === control.value);
     if (record) {
@@ -504,41 +487,53 @@ root.addEventListener('change', event => {
       (fields.namedItem('subjectId') as HTMLSelectElement).value = record.subjectId;
     }
   }
-  if (['sessionId', 'subjectId'].includes(control.name)) {
+  const activity = fields.namedItem('activity') as HTMLSelectElement;
+  const metric = fields.namedItem('metric') as HTMLSelectElement;
+  const subjectId = (fields.namedItem('subjectId') as HTMLSelectElement).value;
+  if (control.name === 'subjectId' || (control.name === 'sessionId' && subjectId !== previousSubject)) {
     if (control.name === 'subjectId') (fields.namedItem('sessionId') as HTMLSelectElement).value = '';
-    const id = (fields.namedItem('subjectId') as HTMLSelectElement).value;
-    const suggestions = resultActivities(data, term, id);
-    if (!editing && (control.name === 'subjectId' || id !== previousSubject)) {
-      const recent = data.academic.results.findLast(row => row.termId === term.id && row.subjectId === id);
-      (fields.namedItem('activity') as HTMLInputElement).value = recent?.activity ?? suggestions[0];
-      const mode = term.courses.find(course => course.subjectId === id)?.mode;
-      (fields.namedItem('metric') as HTMLSelectElement).value = recent?.metric ?? (mode === 'task' ? 'done' : 'score');
-    }
-    const datalist = form.querySelector<HTMLDataListElement>('datalist')!;
-    datalist.replaceChildren(...suggestions.map(value => {
-      const option = document.createElement('option');
-      option.value = value;
-      return option;
-    }));
+    const choices = resultChoices(data, term, subjectId);
+    activity.replaceChildren(...choices.activities.map(value => new Option(value, value)));
+    const scope = fields.namedItem('scope') as HTMLSelectElement;
+    scope.replaceChildren(new Option('未分组', ''), ...choices.scopes.map(value => new Option(value, value)));
+    const difficulty = fields.namedItem('difficulty') as HTMLSelectElement;
+    difficulty.replaceChildren(new Option('未分组', ''), ...Object.entries(choices.difficulties).map(([value, label]) => new Option(label, value)));
+    metric.value = defaultMetric(activity.value, term, subjectId);
+  } else if (control.name === 'activity') {
+    metric.value = defaultMetric(activity.value, term, subjectId);
   }
-  if (control.name === 'activity' && control.value === '独立练习') (fields.namedItem('metric') as HTMLSelectElement).value = 'independent';
+  if (metric.value !== previousMetric && control.name !== 'metric') {
+    (fields.namedItem('value') as HTMLInputElement).value = '';
+    (fields.namedItem('total') as HTMLInputElement).value = ['score', 'official'].includes(metric.value) ? '100' : '';
+    (fields.namedItem('prompted') as HTMLInputElement).value = '';
+  }
   resultFields(form);
 });
 
 async function refresh() {
-  if (!repository || busy || dirty || root.querySelector('dialog[open]') || content.querySelector(':focus-visible')) {
+  const source = repository;
+  if (!source || refreshing || busy || dirty || root.querySelector('dialog[open]') || content.querySelector(':focus-visible')) {
     pending = true;
     return;
   }
   pending = false;
-  await run(async () => {
-    const latest = await repository!.read();
-    if (dirty) { pending = true; return; }
+  refreshing = true;
+  const previous = data;
+  try {
+    const latest = await source.read();
+    if (source !== repository || data !== previous || busy || dirty || root.querySelector('dialog[open]') || content.querySelector(':focus-visible')) {
+      pending = true;
+      return;
+    }
     if (!same(data, latest) || Date.now() - refreshedAt >= 60_000) {
       data = latest;
       render();
     }
-  });
+  } catch (error) {
+    if (source === repository && !busy) report(error);
+  } finally {
+    refreshing = false;
+  }
 }
 async function initialize(recovery?: DeskData) {
   let opened: StudyRepository | undefined;
