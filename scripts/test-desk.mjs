@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { academic, sundayFixture, mondayAt, record } from './fixtures/academic.mjs';
+import { academic, sundayFixture, mondayAt, record, result } from './fixtures/academic.mjs';
 import { deskDatabase, userA, userB } from './fixtures/desk-db.mjs';
 import { flatten, diff, materialize, equal } from '../src/features/desk/entities.ts';
 import { mergePreview, totals } from '../src/features/desk/migration.ts';
@@ -46,6 +46,15 @@ test('multi-source merge is explicit for same ID edits, uncertain duplicates, co
   b.subjects[0].name='other'; b.settings.buffer=20;
   assert.ok(mergePreview(a,b).conflicts.some(c=>c.key==='settings/current'));
   assert.ok(mergePreview(a,b).conflicts.some(c=>c.key==='subjects/school-0'));
+  const longId='s'.repeat(100), collision=seed(), incoming=seed();
+  collision.sessions=[record(longId,'school-0',121)];incoming.sessions=[record(longId,'school-0',120)];
+  incoming.academic.results=[result('linked','school-0','2026-12-28',80,{sessionId:longId})];
+  const both=mergePreview(collision,incoming,new Set(),{['sessions/'+longId]:'both'});
+  assert.equal(both.conflicts.length,0);assert.equal(both.data.sessions.length,2);
+  assert.ok(both.data.sessions.every(row=>row.id.length<=100));
+  assert.notEqual(both.data.academic.results[0].sessionId,longId);
+  assert.ok(both.data.sessions.some(row=>row.id===both.data.academic.results[0].sessionId));
+
 });
 
 test('backup deletion history restores without resurrection and live deletion needs explicit confirmation', () => {

@@ -12,6 +12,7 @@ export function mergePreview(cloud: DeskData, source: DeskData, deleted: Set<str
   assertValid(cloud); assertValid(source);
   const target = new Map(flatten(cloud).map(row => [keyOf(row), row]));
   const conflicts: Conflict[] = [];
+  const sessionRemap = new Map<string, string>();
   let added = 0, duplicates = 0;
   const conflict = (key: string, row: Entity, old: Entity | undefined, reason: string) => {
     const choice = choices[key];
@@ -20,9 +21,10 @@ export function mergePreview(cloud: DeskData, source: DeskData, deleted: Set<str
     // Both only for independent study sessions. Stable suffix makes repeated merge idempotent.
     if (choice === 'both' && row.kind === 'sessions' && !deleted.has(key)) {
       const payload = structuredClone(row.payload) as { id: string };
-      let hash = 2166136261;
-      for (const char of canonical(payload)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-      payload.id = row.id + '_merge_' + (hash >>> 0).toString(16);
+      let hash = 14695981039346656037n;
+      for (const char of canonical(payload)) hash = BigInt.asUintN(64, (hash ^ BigInt(char.charCodeAt(0))) * 1099511628211n);
+      payload.id = row.id.slice(0, 72) + '_merge_' + hash.toString(16).padStart(16, '0');
+      sessionRemap.set(row.id, payload.id);
       const copy = { ...row, id: payload.id, payload };
       const existing = target.get(keyOf(copy));
       if (existing && !equal(existing.payload, payload)) {
@@ -34,6 +36,10 @@ export function mergePreview(cloud: DeskData, source: DeskData, deleted: Set<str
     conflicts.push({ key, cloud: old?.payload ?? null, source: row.payload, reason });
   };
   for (const row of flatten(source)) {
+    if (row.kind === 'results') {
+      const result = row.payload as DeskData['academic']['results'][number];
+      result.sessionId = sessionRemap.get(result.sessionId) ?? result.sessionId;
+    }
     const key = keyOf(row);
     const old = target.get(key);
     if (deleted.has(key)) { conflict(key, row, old, '该标识在云端已删除；保留云端删除，或在原始备份中确认后另建记录。'); continue; }
