@@ -64,9 +64,10 @@ export function pendingWriteMessage(outcome: Exclude<WriteOutcome, 'confirmed'>)
     : '修改已暂存于此设备，待同步。请查看同步状态。';
 }
 type Update = Parameters<StudyRepository['update']>[0];
+type OnLocalCommit = (data: DeskData) => void;
 type WriteResult = { data: DeskData; outcome: WriteOutcome };
 type CloudRepository = StudyRepository & {
-  updateWithOutcome(change: Update): Promise<WriteResult>;
+  updateWithOutcome(change: Update, onLocalCommit?: OnLocalCommit): Promise<WriteResult>;
   merge(expected: DeskData, approved: DeskData, tombstones: Entity[]): Promise<DeskData>;
 };
 export async function openCloudRepository(): Promise<CloudRepository> {
@@ -86,7 +87,7 @@ export async function openCloudRepository(): Promise<CloudRepository> {
       return data;
     });
   }
-  const mutate = (change: Update, at?: number, tombstones: Entity[] = []) => exclusive<WriteResult>(user, async () => {
+  const mutate = (change: Update, at?: number, tombstones: Entity[] = [], onLocalCommit?: OnLocalCommit) => exclusive<WriteResult>(user, async () => {
       await check();
       const cache = await cacheRead(user);
       await synchronize(user, cache);
@@ -114,6 +115,7 @@ export async function openCloudRepository(): Promise<CloudRepository> {
         await cacheWrite(user, cache); // No successful acceptance before IndexedDB commits.
         syncStatus('pending', cache.pending.length);
         announce();
+        onLocalCommit?.(data);
         await synchronize(user, cache);
       }
       await check();
@@ -124,7 +126,7 @@ export async function openCloudRepository(): Promise<CloudRepository> {
   return {
     read,
     update: async (change, at) => (await mutate(change, at)).data,
-    updateWithOutcome: (change) => mutate(change),
+    updateWithOutcome: (change, onLocalCommit) => mutate(change, undefined, [], onLocalCommit),
     merge: async (expected, approved, tombstones) => (await mutate(state => {
       if (!equal(state, expected)) throw new Error('云端或学业状态已改变，请重新选择文件并预览。');
       const approvedMaterials = new Map((approved.prepMaterials ?? []).map(item => [item.id, item]));

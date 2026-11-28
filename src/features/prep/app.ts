@@ -40,7 +40,9 @@ let repository: CloudRepository | undefined;
 let route: PrepRoute;
 let channel: BroadcastChannel | undefined;
 let dialog: HTMLDialogElement | undefined;
-let busy = false;
+let savingTask = false;
+let readingImport = false;
+const taskControlsBusy = () => savingTask || readingImport;
 let blocked = false;
 let refreshing = false;
 let pendingRefresh = false;
@@ -327,7 +329,7 @@ function taskItem(task: PrepTask, detail = false) {
   const checkbox = element('input');
   checkbox.type = 'checkbox';
   checkbox.checked = task.done;
-  checkbox.disabled = busy;
+  checkbox.disabled = taskControlsBusy();
   checkbox.dataset.action = 'task-toggle';
   checkbox.dataset.id = task.id;
   checkbox.dataset.focusKey = `task-toggle-${task.id}`;
@@ -551,7 +553,7 @@ function render() {
   }
   content.replaceChildren(route.courseId ? renderDetail(data, route.courseId) : renderHome(data));
   content.dataset.prepView = route.courseId ? 'detail' : 'home';
-  content.setAttribute('aria-busy', 'false');
+  reflectTaskControls();
   document.title = (route.courseId ? courseLabel(data, route.courseId) + ' · ' : '') + '课程学习与备考中心 · Hikari\'s Space';
   if (route.courseId && route.tab === 'materials') {
     const host = content.querySelector<HTMLElement>('[data-material-host]');
@@ -578,17 +580,35 @@ function render() {
   refreshedAt = Date.now();
 }
 
-async function commit(change: (state: DeskData) => void, message: string | (() => string)) {
-  if (!repository || blocked) throw new Error('当前页面已不能写入私人数据，请重新打开。');
-  if (busy) throw new Error('正在保存任务，请稍候。');
-  busy = true;
-  content.setAttribute('aria-busy', 'true');
+function reflectTaskControls() {
+  const busy = taskControlsBusy();
+  content.setAttribute('aria-busy', String(busy));
   content.querySelectorAll<HTMLInputElement>('input[data-action="task-toggle"]').forEach(input => {
-    input.disabled = true;
+    input.disabled = busy;
   });
-  notify('正在保存任务…');
+  const importButton = root.querySelector<HTMLButtonElement>('[data-action="import-open"]');
+  if (importButton) importButton.disabled = busy || blocked || !data;
+}
+
+function warnBeforeUnacceptedToggle(event: BeforeUnloadEvent) {
+  event.preventDefault();
+}
+
+async function commit(change: (state: DeskData) => void, message: string | (() => string), toggle = false) {
+  if (!repository || blocked) throw new Error('当前页面已不能写入私人数据，请重新打开。');
+  if (taskControlsBusy()) throw new Error('正在处理任务，请稍候。');
+  savingTask = true;
+  reflectTaskControls();
+  if (toggle) window.addEventListener('beforeunload', warnBeforeUnacceptedToggle);
+  notify(toggle ? '正在保存任务到此设备…' : '正在保存任务…');
   try {
-    const saved = await repository.updateWithOutcome(change);
+    const saved = await repository.updateWithOutcome(change, toggle ? local => {
+      window.removeEventListener('beforeunload', warnBeforeUnacceptedToggle);
+      if (blocked) return;
+      data = local;
+      notify(pendingWriteMessage('pending'));
+      render();
+    } : undefined);
     if (blocked) return;
     data = saved.data;
     const feedback = saved.outcome === 'confirmed'
@@ -596,8 +616,8 @@ async function commit(change: (state: DeskData) => void, message: string | (() =
       : pendingWriteMessage(saved.outcome);
     notify(feedback, saved.outcome === 'conflict');
   } finally {
-    busy = false;
-    content.setAttribute('aria-busy', 'false');
+    if (toggle) window.removeEventListener('beforeunload', warnBeforeUnacceptedToggle);
+    savingTask = false;
     render();
   }
 }
@@ -749,7 +769,7 @@ async function runDialogAction(modal: HTMLDialogElement, action: () => Promise<v
 
 async function deleteTask(id: string) {
   const task = tasksOf(data).find(taskId(id));
-  if (!task || busy) return;
+  if (!task || taskControlsBusy()) return;
   if (!confirm(`删除任务“${task.title}”？`)) return;
   await commit(state => {
     const list = state.prepTasks ?? [];
@@ -768,7 +788,7 @@ async function toggleTask(id: string, done: boolean) {
     const current = (state.prepTasks ?? []).find(taskId(id));
     if (!current) throw new Error('任务已在另一个窗口变更，请刷新后重试。');
     current.done = done;
-  }, done ? '任务已完成。' : '任务已标记为未完成。');
+  }, done ? '任务已完成。' : '任务已标记为未完成。', true);
 }
 
 async function moveTask(id: string, direction: -1 | 1) {
@@ -1094,7 +1114,7 @@ async function processMarkdownSource(text: string, file: File) {
 }
 
 function interactionIsSafe() {
-  return !busy && !blocked && !dialog?.open &&
+  return !taskControlsBusy() && !blocked && !dialog?.open &&
     !content.querySelector('dialog[open]') &&
     !content.querySelector('.prep-materials[aria-busy="true"]') &&
     !document.activeElement?.closest('form') &&
@@ -1113,7 +1133,7 @@ async function refresh() {
   const previous = data;
   try {
     const latest = await repository.read();
-    if (blocked || busy || generation !== refreshGeneration || data !== previous || !interactionIsSafe()) {
+    if (blocked || generation !== refreshGeneration || data !== previous || !interactionIsSafe()) {
       pendingRefresh = true;
       return;
     }
@@ -1123,7 +1143,7 @@ async function refresh() {
     }
     refreshedAt = Date.now();
   } catch (error) {
-    if (!blocked && !busy) report(error);
+    if (!blocked && !taskControlsBusy()) report(error);
   } finally {
     refreshing = false;
   }
@@ -1179,21 +1199,21 @@ root.addEventListener('change', event => {
   if (target.matches('[data-import-file]')) {
     const file = (target as HTMLInputElement).files?.[0];
     target.value = '';
-    if (!file) return;
+    if (!file || taskControlsBusy() || blocked) return;
     if (file.size > 2 * 1024 * 1024) {
       report(new Error('Markdown 原稿超过 2 MiB，请精简后重试。'));
       return;
     }
     void (async () => {
-      busy = true;
-      content.setAttribute('aria-busy', 'true');
+      readingImport = true;
+      reflectTaskControls();
       try {
         await processMarkdownSource(await file.text(), file);
       } catch (error) {
         report(error);
       } finally {
-        busy = false;
-        content.setAttribute('aria-busy', 'false');
+        readingImport = false;
+        reflectTaskControls();
       }
     })();
     return;
@@ -1202,9 +1222,11 @@ root.addEventListener('change', event => {
     const checkbox = target as HTMLInputElement;
     const task = tasksOf(data).find(taskId(checkbox.dataset.id ?? ''));
     if (!task) { render(); return; }
-    if (busy) { checkbox.checked = task.done; return; }
+    const requested = checkbox.checked;
+    checkbox.checked = task.done;
+    if (taskControlsBusy() || requested === task.done) return;
     focusedKey = checkbox.dataset.focusKey ?? '';
-    void toggleTask(task.id, checkbox.checked).catch(report);
+    void toggleTask(task.id, requested).catch(report);
   }
 });
 
@@ -1235,12 +1257,12 @@ root.addEventListener('click', event => {
     if (task) openTaskDialog(task);
     else report(new Error('任务已在另一个窗口删除。'));
   } else if (action === 'task-delete') {
-    void deleteTask(id);
+    void deleteTask(id).catch(report);
   } else if (action === 'task-up') {
     void moveTask(id, -1).catch(report);
   } else if (action === 'task-down') {
     void moveTask(id, 1).catch(report);
-  } else if (action === 'import-open') {
+  } else if (action === 'import-open' && !taskControlsBusy()) {
     root.querySelector<HTMLInputElement>('#prep-import-file')?.click();
   }
 });
@@ -1290,8 +1312,6 @@ async function initialize() {
     route = parseRoute(data);
     history.replaceState(null, '', routeUrl(route));
     render();
-    const importer = root.querySelector<HTMLButtonElement>('[data-action="import-open"]');
-    if (importer) importer.disabled = false;
     if (typeof BroadcastChannel === 'function') {
       channel = new BroadcastChannel(channelName);
       channel.addEventListener('message', () => {

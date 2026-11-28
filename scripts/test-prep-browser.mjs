@@ -107,32 +107,72 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     await phone.getByLabel('任务标题', { exact: true }).fill(slowTitle);
     await phone.locator('dialog[open] form button[type=submit]').click();
     await row(phone, slowTitle).waitFor();
-    synthetic.commit.delayMs = 2_000;
-    let slowBox = row(phone, slowTitle).getByRole('checkbox');
-    await slowBox.check();
-    await phone.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
-    assert.ok(await slowBox.isDisabled(), 'Task checkbox must be disabled as soon as the save begins.');
-    await slowBox.click({ force: true });
+    const slowBox = row(phone, slowTitle).getByRole('checkbox');
+    const otherBox = row(phone, title).getByRole('checkbox');
+    const protectsUnsavedToggle = () => phone.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      return !window.dispatchEvent(event);
+    });
+
+    // While the server snapshot is delayed, no outbox row exists and the checkbox must stay unchanged.
+    synthetic.snapshotDelayMs = 2_000;
+    const preRead = phone.waitForRequest(request => request.url().endsWith('/desk_snapshot'));
+    await slowBox.click();
+    await preRead;
+    await phone.locator('#prep-status').filter({ hasText: '正在保存任务到此设备' }).waitFor();
+    assert.ok(await slowBox.isDisabled());
+    assert.equal(await slowBox.isChecked(), false);
+    assert.ok(await protectsUnsavedToggle());
     await phone.reload();
     await synced(phone);
-    slowBox = row(phone, slowTitle).getByRole('checkbox');
+    assert.equal(await slowBox.isChecked(), false);
+    assert.equal(await protectsUnsavedToggle(), false);
+    synthetic.snapshotDelayMs = 0;
+
+    // Reproduce the empty-file import and current-week rerender during a delayed write.
+    synthetic.commit.delayMs = 4_000;
+    await slowBox.click();
+    await phone.locator('#prep-status').filter({ hasText: '修改已暂存' }).waitFor();
+    assert.ok(await slowBox.isChecked(), 'The new value becomes visible as soon as the local outbox is durable.');
+    assert.equal(await protectsUnsavedToggle(), false);
+    assert.ok(await slowBox.isDisabled());
+    assert.ok(await phone.locator('[data-action=import-open]').isDisabled());
+    await phone.locator('[data-import-file]').setInputFiles({
+      name: '合成空计划.md', mimeType: 'text/markdown', buffer: Buffer.alloc(0),
+    });
+    await button(phone, '当前周').click();
+    assert.ok(await slowBox.isDisabled());
+    assert.ok(await otherBox.isDisabled());
+    assert.match(await phone.locator('#prep-status').innerText(), /修改已暂存/);
+    await otherBox.click({ force: true });
+    await phone.reload();
+    await synced(phone);
     assert.ok(await slowBox.isChecked());
-    assert.ok(!(await slowBox.isDisabled()));
-    await slowBox.uncheck();
-    await phone.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
-    assert.ok(await slowBox.isDisabled(), 'The second toggle must use the same visible save lock.');
+    assert.equal(await otherBox.isChecked(), false);
+
+    // An aborted import also restores the controls after the save has finished.
+    await phone.locator('[data-import-file]').setInputFiles({
+      name: '合成空计划.md', mimeType: 'text/markdown', buffer: Buffer.alloc(0),
+    });
+    await phone.locator('#prep-status').filter({ hasText: 'Markdown 内容为空' }).waitFor();
+    assert.equal(await otherBox.isDisabled(), false);
+
+    await slowBox.click();
+    await phone.locator('#prep-status').filter({ hasText: '修改已暂存' }).waitFor();
+    assert.ok(await slowBox.isDisabled());
+    assert.equal(await slowBox.isChecked(), false);
     await phone.reload();
     await synced(phone);
-    slowBox = row(phone, slowTitle).getByRole('checkbox');
-    assert.ok(!(await slowBox.isChecked()));
-    assert.ok(!(await slowBox.isDisabled()));
+    assert.equal(await slowBox.isChecked(), false);
+    assert.equal(await slowBox.isDisabled(), false);
     synthetic.commit.delayMs = 0;
-    console.log('Slow task saves disable the checkbox, expose 待同步, survive reloads and apply the second toggle.');
+    console.log('Prep toggles preserve the prior value before IndexedDB, survive reload after acceptance, and stay locked across import/navigation.');
 
     await tablet.reload();
     await synced(tablet);
     await row(tablet, title).waitFor();
-    await row(tablet, title).getByRole('checkbox').check();
+    await row(tablet, title).getByRole('checkbox').click();
+    await tablet.locator('#prep-status').filter({ hasText: '任务已完成' }).waitFor();
     await phone.reload();
     await synced(phone);
     assert.ok(await row(phone, title).getByRole('checkbox').isChecked());
@@ -166,7 +206,7 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     const displayed = await phone.locator('[data-prep-week="2026-11-23"] [data-task-id]').allTextContents();
     const importedOrder = displayed.filter(text => text.includes(imported) || text.includes(secondTask));
     assert.match(importedOrder[0], /合成回顾任务/);
-    await row(phone, imported).getByRole('checkbox').check();
+    await row(phone, imported).getByRole('checkbox').click();
     await phone.locator('#prep-status').filter({ hasText: '任务已完成' }).waitFor();
     await tablet.goto(route);
     await synced(tablet);
@@ -341,7 +381,7 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     assert.equal(remoteTask.done, false);
     remoteTask.notes = '合成另一设备编辑';
     synthetic.commit.delayMs = 2_000;
-    await row(tablet, slowTitle).getByRole('checkbox').check();
+    await row(tablet, slowTitle).getByRole('checkbox').click();
     await tablet.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
     await database.commit(userA, randomUUID(), diff(remoteRows, remoteState));
     await tablet.locator('#prep-status').filter({ hasText: '同步存在冲突' }).waitFor();
@@ -349,10 +389,15 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     const remoteAfter = materialize(await database.snapshot(userA)).prepTasks.find(task => task.id === remoteTask.id);
     assert.deepEqual(remoteAfter, remoteTask);
     console.log('CAS conflict preserves the remote task and never reports the pending toggle as complete.');
+    await row(tablet, imported).locator('[data-action=task-delete]').click();
+    await tablet.locator('#prep-status').filter({ hasText: /操作未完成.*冲突/ }).waitFor();
+    assert.ok((await database.snapshot(userA)).some(item => !item.deleted && item.payload?.title?.includes(imported)));
+    console.log('With an existing conflict, a rejected deletion reports an error and preserves the task.');
 
     assert.deepEqual(errors, []);
     console.log('Prep cloud browser: shared tasks, safe import matching, slow saves, retryable failures, guarded materials and long transfers verified.');
   } finally {
+    synthetic.snapshotDelayMs = 0;
     synthetic.commit.failures = 0;
     synthetic.commit.delayMs = 0;
     synthetic.storage.failures.delete = 0;

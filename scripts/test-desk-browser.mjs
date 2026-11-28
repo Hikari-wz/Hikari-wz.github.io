@@ -25,6 +25,7 @@ const files = new Map();
 const prepBucket = '/storage/v1/object/desk-prep-files';
 const synthetic = {
   commit: { failures: 0, delayMs: 0 },
+  snapshotDelayMs: 0,
   storage: {
     failures: { delete: 0 },
     delayMs: { upload: 0, download: 0 },
@@ -115,7 +116,10 @@ const server=createServer(async(req,res)=>{
         if(loseResponse) {loseResponse=false;req.socket.destroy();return;}
         return send(200,data);
       }
-      if(url.pathname.endsWith('/desk_snapshot'))return send(200,await database.snapshot(id));
+      if(url.pathname.endsWith('/desk_snapshot')) {
+        if (synthetic.snapshotDelayMs) await delay(synthetic.snapshotDelayMs);
+        return send(200,await database.snapshot(id));
+      }
     }
     const path=url.pathname.endsWith('/')?url.pathname+'index.html':url.pathname;
     const bytes=await readFile(join('dist-cloud',path));
