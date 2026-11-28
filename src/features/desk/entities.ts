@@ -3,7 +3,8 @@ import { emptyData } from '../study/model.ts';
 import { assertValid } from '../study/storage.ts';
 
 export const kinds = ['settings', 'subjects', 'exams', 'plans', 'sessions', 'timer', 'reviews',
-  'academic', 'terms', 'assessments', 'results', 'materials', 'versions', 'adjustments'] as const;
+  'academic', 'terms', 'assessments', 'results', 'materials', 'versions', 'adjustments',
+  'prepTasks', 'prepMaterials'] as const;
 export type Kind = typeof kinds[number];
 export interface Entity { kind: Kind; id: string; payload: unknown; ordinal: number; version: number; deleted: boolean; createdAt?: string; updatedAt?: string }
 export interface Change { kind: Kind; id: string; payload: unknown; ordinal: number; expected: number | null; deleted: boolean }
@@ -17,7 +18,8 @@ export function canonical(value: unknown): string {
 export const equal = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 export function flatten(data: DeskData): Entity[] {
   assertValid(data);
-  if (Object.keys(data).some(key => !['settings','subjects','exams','plans','sessions','timer','reviews','academic'].includes(key))) {
+  if (Object.keys(data).some(key => !['settings','subjects','exams','plans','sessions','timer','reviews','academic',
+    'prepTasks','prepMaterials'].includes(key))) {
     throw new Error('来源包含当前版本无法识别的业务字段，请保留原始备份并升级迁移工具。');
   }
   const rows: Entity[] = [];
@@ -33,6 +35,8 @@ export function flatten(data: DeskData): Entity[] {
     for (const item of list) put(kind as Kind, item.id, item);
   }
   for (const item of adjustments) put('adjustments', `${item.proposal.termId}_${item.proposal.week}_${item.confirmedAt}`, item);
+  for (const item of data.prepTasks ?? []) put('prepTasks', item.id, item);
+  for (const item of data.prepMaterials ?? []) put('prepMaterials', item.id, item);
   if (new Set(rows.map(keyOf)).size !== rows.length) throw new Error('记录标识冲突，请检查备份。');
   return rows;
 }
@@ -53,6 +57,8 @@ export function materialize(rows: Entity[]): DeskData {
       ...single('academic') as object, terms: list('terms'), assessments: list('assessments'), results: list('results'),
       materials: list('materials'), versions: single('versions'), adjustments: list('adjustments'),
     } } as DeskData;
+  if (rows.some(row => row.kind === 'prepTasks')) data.prepTasks = list('prepTasks') as DeskData['prepTasks'];
+  if (rows.some(row => row.kind === 'prepMaterials')) data.prepMaterials = list('prepMaterials') as DeskData['prepMaterials'];
   assertValid(data);
   return data;
 }

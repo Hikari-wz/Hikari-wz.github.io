@@ -31,7 +31,7 @@ const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   try {
     if (path === '/__academic-test') return response.setHeader('Content-Type', 'text/html').end('<title>Academic test harness</title>');
-    if (/^\/__source\/(study|academic)\/[a-z]+\.ts$/.test(path)) {
+    if (/^\/__source\/(?:(study|academic)\/[a-z]+|prep\/model)\.ts$/.test(path)) {
       const source = await readFile('src/features/' + path.slice('/__source/'.length), 'utf8');
       const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2024 } });
       return response.setHeader('Content-Type', mime.js).end(compiled.outputText);

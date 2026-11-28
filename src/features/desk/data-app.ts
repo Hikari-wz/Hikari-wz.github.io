@@ -123,7 +123,7 @@ if (!cloudEnabled) {
       materialize(data as Entity[]);
       download({ format: 'hikari-desk-cloud', version: 1, schema: 1, exportedAt: new Date().toISOString(),
         rows: data, sha256: await digest(data) }, 'cloud-backup');
-      message.textContent = '完整云端备份已生成（含删除墓碑）。待同步修改请另行导出队列。';
+      message.textContent = '完整云端备份已生成（含备考任务、资料元数据和删除墓碑）。资料文件本体请在备考资料视图逐项下载归档；待同步修改请另行导出队列。';
     }));
     const outbox = async () => {
       const cache = await pendingBackup();

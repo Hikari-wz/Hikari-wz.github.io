@@ -9,6 +9,7 @@ import { chromium, devices } from 'playwright-core';
 import { deskDatabase, userA, userB } from './fixtures/desk-db.mjs';
 import { academic, record } from './fixtures/academic.mjs';
 import { diff, materialize } from '../src/features/desk/entities.ts';
+import { testPrepBrowser } from './test-prep-browser.mjs';
 
 const database=await deskDatabase();
 await database.commit(userA,randomUUID(),diff([],academic().data));
@@ -20,13 +21,48 @@ const user = id => ({id,aud:'authenticated',role:'authenticated',email:id===user
   app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()});
 const mime={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',webmanifest:'application/manifest+json'};
 let failRead=false, loseResponse=false, commits=0;
+const files = new Map();
+const prepBucket = '/storage/v1/object/desk-prep-files';
+async function storage(req, res, url, send) {
+  const owner = tokens.get(req.headers.authorization?.replace('Bearer ', ''));
+  if (!owner) return send(401, { message: 'unauthorized' });
+  const path = url.pathname.slice(prepBucket.length + 1);
+  const own = key => key.startsWith(owner + '/') && /^[0-9a-f-]+$/.test(key.split('/')[1] ?? '') && key.split('/').length === 2;
+  if (req.method === 'GET') {
+    if (!own(path) || !files.has(path)) return send(404, { statusCode: '404', message: 'Object not found' });
+    const file = files.get(path);
+    res.writeHead(200, { 'Content-Type': file.type, 'Cache-Control': 'no-store' }).end(file.bytes);
+    return;
+  }
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  if (req.method === 'DELETE') {
+    const { prefixes } = JSON.parse(body);
+    if (prefixes.some(key => !own(key))) return send(403, { message: 'forbidden' });
+    const removed = prefixes.filter(key => files.delete(key));
+    return send(200, removed.map(name => ({ name })));
+  }
+  if (req.method !== 'POST' || !own(path)) return send(403, { message: 'forbidden' });
+  if (files.has(path)) return send(409, { statusCode: '409', message: 'The resource already exists' });
+  const request = new Request(url, {
+    method: 'POST', headers: { 'Content-Type': req.headers['content-type'] }, body,
+  });
+  const form = await request.formData();
+  const file = [...form.values()].find(entry => entry instanceof Blob);
+  files.set(path, { bytes: Buffer.from(await file.arrayBuffer()), type: file.type });
+  return send(200, { Key: 'desk-prep-files/' + path, Id: randomUUID() });
+}
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin','*');
-  res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');
+  res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info,x-upsert');
   if(req.method==='OPTIONS') {res.writeHead(200).end();return;}
   const url=new URL(req.url,'http://localhost');
   const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json'}).end(JSON.stringify(data));};
   try {
+    if (url.pathname === prepBucket || url.pathname.startsWith(prepBucket + '/')) {
+      return await storage(req, res, url, send);
+    }
     if(url.pathname.startsWith('/auth/v1/')) {
       let raw='';for await(const chunk of req)raw+=chunk;
       const input=raw?JSON.parse(raw):{};
@@ -236,6 +272,7 @@ try {
   assert.deepEqual(errors,[]);
   assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   console.log('Logout privacy, different-account cache isolation and mobile-width layout verified.');
+  await testPrepBrowser({ browser, devices, base, login, database, files });
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await database.db.close();
 }

@@ -1,6 +1,7 @@
 import { assessmentScheduleId, migrateStudy, type DeskData } from '../academic/model.ts';
 import { reconcileUpdate, settle } from '../academic/review.ts';
 import { validAcademic } from '../academic/validation.ts';
+import { validatePrepData } from '../prep/model.ts';
 import {
   emptyData, examStatusNames, importanceNames, masteryNames, phases, qualityFor, tracks,
   type Split, type StudyData,
@@ -101,6 +102,10 @@ function decode(input: unknown): DeskData {
   if (!validAcademic((input.data as DeskData).academic, input.data, validData)) {
     throw new Error('备份的学业数据不完整，或包含无效的关联。');
   }
+  validatePrepData(input.data, {
+    subjects: (input.data as DeskData).subjects,
+    terms: (input.data as DeskData).academic.terms,
+  });
   return input.data as DeskData;
 }
 
@@ -330,6 +335,7 @@ export async function openStudyRepository(recovery?: DeskData): Promise<StudyRep
 
 export function assertValid(data: DeskData) {
   if (!validData(data) || !validAcademic(data.academic, data, validData)) throw new Error('数据无效，请检查日期、范围及关联。');
+  validatePrepData(data, { subjects: data.subjects, terms: data.academic.terms });
 }
 
 export function reconcileReferences(before: DeskData, data: DeskData) {

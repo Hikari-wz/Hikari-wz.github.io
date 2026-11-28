@@ -1,4 +1,5 @@
 import type { Exam, Settings, StudyData } from '../study/model.ts';
+import type { PrepData } from '../prep/model.ts';
 
 export const modes = ['ability', 'bank', 'task'] as const;
 export const states = ['unassessed', 'normal', 'strengthen', 'achieved', 'completed'] as const;
@@ -96,7 +97,7 @@ export interface Academic {
   versions: ConfigVersion[]; adjustments: Adjustment[];
   next: { termId: string; day: string; subjectId: string; action: string; defer: boolean } | null;
 }
-export type DeskData = StudyData & { academic: Academic };
+export type DeskData = StudyData & PrepData & { academic: Academic };
 
 export function migrateStudy(study: StudyData): DeskData {
   const data = structuredClone(study);
