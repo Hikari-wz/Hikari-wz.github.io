@@ -1,3 +1,4 @@
+import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { client, owner } from '../desk/client.ts';
@@ -5,14 +6,15 @@ import { pendingWriteMessage, type WriteOutcome } from '../desk/repository.ts';
 import { prepMaterialFileLimit, prepMaterialPath, type DeskData, type PrepMaterial } from './model.ts';
 const BUCKET = 'desk-prep-files';
 const MARKDOWN_TEXT_LIMIT = 1024 * 1024;
-const parser = unified().use(remarkParse);
+const parser = unified().use(remarkParse).use(remarkGfm);
 interface Context {
   termId: string; courseId: string; onError: (error: unknown) => void; read: () => PrepMaterial[];
   update: (mutate: (data: DeskData) => void) => Promise<WriteOutcome>;
 }
 interface MdNode {
   type: string; value?: string; url?: string; alt?: string; depth?: number;
-  ordered?: boolean; start?: number; children?: MdNode[];
+  ordered?: boolean; start?: number; checked?: boolean | null; children?: MdNode[];
+  align?: ('left' | 'center' | 'right' | null)[];
 }
 interface Viewer { kind: 'pdf' | 'markdown'; blob: Blob; filename: string; url?: string }
 interface State { context: Context; busy: boolean; message: string; error: boolean; missingId: string; viewer?: Viewer }
@@ -43,12 +45,32 @@ function safeFilename(value: string): string {
 function safeMime(value: string): string {
   return /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(value) ? value.toLowerCase() : 'application/octet-stream';
 }
+function markdownTable(item: MdNode, depth: number): HTMLElement {
+  const scroller = node('div', 'prep-markdown__table');
+  scroller.tabIndex = 0;
+  const table = node('table');
+  const header = table.createTHead();
+  const body = table.createTBody();
+  (item.children ?? []).forEach((itemRow, index) => {
+    const row = (index === 0 ? header : body).insertRow();
+    (itemRow.children ?? []).forEach((itemCell, column) => {
+      const cell = node(index === 0 ? 'th' : 'td');
+      if (index === 0) cell.scope = 'col';
+      const alignment = item.align?.[column];
+      if (alignment) cell.style.textAlign = alignment;
+      markdownNodes(cell, itemCell.children, depth + 1);
+      row.appendChild(cell);
+    });
+  });
+  scroller.appendChild(table);
+  return scroller;
+}
 function markdownNodes(parent: HTMLElement, nodes: MdNode[] = [], depth = 0): void {
   for (const item of nodes) {
     if (depth > 40) continue;
     switch (item.type) {
       case 'heading': {
-        const heading = node(item.depth === 1 ? 'h3' : 'h4', `prep-markdown__h${item.depth ?? 2}`);
+        const heading = node((['h3', 'h4', 'h5', 'h6'] as const)[Math.min(3, (item.depth ?? 1) - 1)]);
         markdownNodes(heading, item.children, depth + 1); parent.appendChild(heading);
         break;
       }
@@ -57,18 +79,36 @@ function markdownNodes(parent: HTMLElement, nodes: MdNode[] = [], depth = 0): vo
         break;
       }
       case 'list': {
-        const list: HTMLOListElement | HTMLUListElement = item.ordered ? node('ol') : node('ul');
+        const list = item.ordered ? node('ol') : node('ul');
+        if (list instanceof HTMLOListElement && item.start != null) list.start = item.start;
         markdownNodes(list, item.children, depth + 1); parent.appendChild(list);
         break;
       }
-      case 'listItem': markdownNodes(parent, item.children, depth + 1); break;
+      case 'listItem': {
+        const listItem = node('li');
+        markdownNodes(listItem, item.children, depth + 1);
+        if (typeof item.checked === 'boolean') {
+          listItem.classList.add('prep-markdown__task');
+          const check = node('input');
+          check.type = 'checkbox';
+          check.disabled = true;
+          check.checked = item.checked;
+          check.setAttribute('aria-label', item.checked ? '已勾选' : '未勾选');
+          const label = listItem.firstElementChild;
+          (label instanceof HTMLParagraphElement ? label : listItem).prepend(check, ' ');
+        }
+        parent.appendChild(listItem);
+        break;
+      }
+      case 'table': parent.appendChild(markdownTable(item, depth)); break;
       case 'blockquote': {
         const quote = node('blockquote'); markdownNodes(quote, item.children, depth + 1); parent.appendChild(quote);
         break;
       }
       case 'strong':
-      case 'emphasis': {
-        const mark = node(item.type === 'strong' ? 'strong' : 'em');
+      case 'emphasis':
+      case 'delete': {
+        const mark = node(item.type === 'strong' ? 'strong' : item.type === 'emphasis' ? 'em' : 'del');
         markdownNodes(mark, item.children, depth + 1); parent.appendChild(mark);
         break;
       }
@@ -90,6 +130,7 @@ function markdownNodes(parent: HTMLElement, nodes: MdNode[] = [], depth = 0): vo
         break;
       case 'html': parent.appendChild(document.createTextNode(item.value ?? '')); break;
       case 'break': parent.appendChild(node('br')); break;
+      case 'thematicBreak': parent.appendChild(node('hr')); break;
       case 'text': parent.appendChild(document.createTextNode(item.value ?? '')); break;
       default: markdownNodes(parent, item.children, depth + 1);
     }
@@ -99,7 +140,7 @@ function markdownDocument(text: string): HTMLElement {
   const article = node('article', 'prep-markdown');
   try {
     markdownNodes(article, (parser.parse(text) as unknown as { children?: MdNode[] }).children);
-  } catch { article.textContent = text; }
+  } catch { article.replaceChildren(node('pre', 'prep-markdown__code', text)); }
   return article;
 }
 const rows = (state: State): PrepMaterial[] => {
@@ -389,6 +430,7 @@ function showViewer(state: State, container: HTMLElement, item: PrepMaterial,
   }, { once: true });
   container.appendChild(dialog);
   dialog.showModal();
+  container.querySelector('.prep-materials__status')?.remove();
 }
 async function restore(state: State, id: string, file: File): Promise<void> {
   if (!file.size || file.size > prepMaterialFileLimit) throw new Error('文件必须非空且不超过 25 MiB。');

@@ -104,21 +104,62 @@
   border-radius: .45rem;
   background: var(--surface);
 }
+.study .prep-materials__viewer[data-prep-reader="markdown"][open] {
+  box-sizing: border-box;
+  display: grid;
+  grid-template: auto minmax(0, 1fr) / minmax(0, 1fr);
+  width: min(calc(100% - 2rem), 72rem);
+  height: min(94dvh, 64rem);
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: .75rem;
+  background: var(--paper);
+}
+[data-prep-reader="markdown"] .prep-materials__viewer-header {
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  margin: 0;
+  padding: .75rem clamp(.85rem, 2.5vw, 1.5rem);
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+[data-prep-reader="markdown"] .prep-materials__viewer-header h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(1.02rem, 2.1vw, 1.35rem);
+}
+[data-prep-reader="markdown"] .prep-materials__viewer-header .study-actions {
+  flex: 0 0 auto;
+}
+[data-prep-reader="markdown"] .prep-materials__viewer-content {
+  min-width: 0;
+  height: auto;
+  overscroll-behavior: contain;
+}
 .prep-markdown {
-  width: min(100%, 50rem);
+  width: min(100%, 64rem);
   margin-inline: auto;
-  padding: clamp(.5rem, 2vw, 1.25rem);
+  padding: clamp(.85rem, 3vw, 1.85rem);
   line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 .prep-markdown > :first-child {
   margin-top: 0;
 }
-.prep-markdown h3,
-.prep-markdown h4 {
+.prep-markdown :is(h3, h4, h5, h6) {
   font-family: var(--serif);
   line-height: 1.3;
   margin-block: 1.4em .45em;
 }
+.prep-markdown h3 { font-size: 1.5rem; }
+.prep-markdown h4 { font-size: 1.25rem; }
+.prep-markdown :is(h5, h6) { font-size: 1.08rem; }
+.prep-markdown p { margin-block: .65em; }
 .prep-markdown ul,
 .prep-markdown ol {
   padding-inline-start: 1.5rem;
@@ -129,6 +170,44 @@
 }
 .prep-markdown ol {
   list-style: decimal;
+}
+.prep-markdown li > p { margin-block: .25em; }
+.prep-markdown__task {
+  list-style: none;
+}
+.prep-markdown__task input {
+  accent-color: var(--accent);
+}
+.prep-markdown__table {
+  max-width: 100%;
+  margin-block: 1rem 1.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: .5rem;
+}
+.prep-markdown__table:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.prep-markdown__table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+  font-size: .95em;
+}
+.prep-markdown__table :is(th, td) {
+  min-width: 7rem;
+  padding: .6rem .8rem;
+  border: 1px solid var(--rule);
+  border-inline-start: 0;
+  border-block-start: 0;
+  vertical-align: top;
+}
+.prep-markdown__table :is(th, td):last-child { border-inline-end: 0; }
+.prep-markdown__table :is(thead:only-child, tbody) tr:last-child td { border-block-end: 0; }
+.prep-markdown__table th,
+.prep-markdown__table tbody tr:nth-child(even) {
+  background: var(--panel);
 }
 .prep-markdown blockquote {
   padding-inline-start: .9rem;
@@ -155,5 +234,20 @@
   }
   .prep-materials__viewer-header {
     display: grid;
+  }
+  .study .prep-materials__viewer[data-prep-reader="markdown"][open] {
+    width: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+    border: 0;
+    border-radius: 0;
+  }
+  [data-prep-reader="markdown"] .prep-materials__viewer-header {
+    display: flex;
+  }
+  [data-prep-reader="markdown"] .prep-materials__viewer-header .study-action {
+    min-height: 2.75rem;
+    padding-inline: .55rem;
   }
 }

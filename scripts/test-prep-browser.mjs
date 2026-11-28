@@ -11,7 +11,32 @@ const secondTask = '合成回顾任务';
 const slowTitle = '合成慢速勾选';
 const retryTask = '合成503重试任务';
 const retrySecondTask = '合成503第二任务';
-const fileBytes = Buffer.from('# 合成附件\n\n测试正文。\n\n<script>globalThis.prepUnsafe = true</script>');
+const fileBytes = Buffer.from(`# 合成附件
+
+测试正文。
+
+## 题目速查
+
+| 设问 | 来源 | 结构 | 关键词 |
+| --- | :---: | --- | ---: |
+| 第一题 | 讲义 | **因果** | 分析 \\| 回顾 |
+| 第二题 | 附页 | ~~旧思路~~ | 复测 |
+
+3. 第一项
+   - 子要点
+4. 第二项
+
+- [x] 已检查
+- [ ] 待检查
+
+[不安全链接](javascript:alert%281%29)
+
+![禁止外载](https://example.invalid/private.png)
+
+<script>globalThis.prepUnsafe = true</script>
+
+${'测试长文滚动。\n\n'.repeat(45)}
+`);
 
 async function addCourseAlias(database, subjectId, name) {
   const rows = await database.snapshot(userA);
@@ -246,12 +271,46 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     const material = phone.locator('li.prep-material').filter({ hasText: '合成资料.md' });
     await material.getByRole('button', { name: '阅读', exact: true }).waitFor();
     await material.getByRole('button', { name: '阅读', exact: true }).click();
-    await phone.getByRole('heading', { name: '合成附件', exact: true }).waitFor();
+    const reader = phone.getByRole('dialog', { name: '合成资料.md Markdown 阅读器' });
+    await reader.getByRole('heading', { name: '合成附件', exact: true }).waitFor();
+    const table = reader.getByRole('table');
+    assert.equal(await table.getByRole('columnheader').count(), 4);
+    assert.equal(await table.locator('tbody tr').count(), 2);
+    assert.equal(await table.locator('strong').innerText(), '因果');
+    assert.equal(await table.locator('del').innerText(), '旧思路');
+    assert.equal(await table.getByRole('cell', { name: '分析 | 回顾' }).count(), 1);
+    assert.equal(await table.getByRole('columnheader', { name: '来源' }).evaluate(cell => getComputedStyle(cell).textAlign), 'center');
+    assert.equal(await reader.locator('ol[start="3"] > li > ul > li').innerText(), '子要点');
+    assert.ok(await reader.getByRole('checkbox', { name: '已勾选' }).isChecked());
+    assert.ok(await reader.getByRole('checkbox', { name: '未勾选' }).isDisabled());
+    assert.equal(await reader.locator('a[href^="javascript:"], img, script').count(), 0);
     assert.equal(await phone.evaluate(() => globalThis.prepUnsafe), undefined);
+    assert.equal(await phone.locator('.prep-materials__status').count(), 0);
+
+    const scroller = reader.locator('.prep-markdown__table');
+    assert.ok(await scroller.evaluate(el => el.scrollWidth > el.clientWidth));
+    const body = reader.locator('[data-prep-reader-content]');
+    assert.ok(await body.evaluate(el => el.scrollHeight > el.clientHeight && el.scrollWidth <= el.clientWidth + 1));
+    const header = reader.locator('.prep-materials__viewer-header');
+    const headerTop = (await header.boundingBox()).y;
+    await body.evaluate(el => { el.scrollTop = 800; });
+    assert.ok(await body.evaluate(el => el.scrollTop > 0));
+    assert.equal((await header.boundingBox()).y, headerTop);
+    await phone.emulateMedia({ colorScheme: 'light' });
+    const light = await reader.evaluate(el => getComputedStyle(el).backgroundColor);
+    await phone.emulateMedia({ colorScheme: 'dark' });
+    assert.notEqual(await reader.evaluate(el => getComputedStyle(el).backgroundColor), light);
+    const mobileViewport = phone.viewportSize();
+    await phone.setViewportSize({ width: 1366, height: 900 });
+    assert.ok((await reader.boundingBox()).width > 850);
+    assert.ok(await scroller.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+    await phone.setViewportSize(mobileViewport);
+    await phone.emulateMedia({ colorScheme: null });
     await phone.keyboard.press('Escape');
     const download = phone.waitForEvent('download');
     await material.getByRole('button', { name: '下载', exact: true }).click();
     assert.deepEqual(await readFile(await (await download).path()), fileBytes);
+    console.log('Markdown uses semantic tables and lists, keeps wide-table scrolling inside the reader, and respects light/dark themes.');
 
     const guardBytes = Buffer.from('# 删除保护\n\n仅用于验证元数据确认后的文件清理顺序。\n');
     await phone.locator('[data-prep-input=upload]').setInputFiles({
