@@ -11,7 +11,24 @@ export async function deskDatabase() {
     create function auth.uid() returns uuid language sql stable as
       $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     grant usage on schema auth to anon, authenticated;
-    grant execute on function auth.uid() to anon, authenticated;`);
+    grant execute on function auth.uid() to anon, authenticated;
+    create schema storage;
+    create table storage.buckets(
+      id text primary key,
+      name text not null,
+      public boolean not null default false,
+      file_size_limit bigint
+    );
+    create table storage.objects(
+      id uuid primary key default gen_random_uuid(),
+      bucket_id text not null references storage.buckets(id),
+      name text not null,
+      owner_id uuid
+    );
+    alter table storage.objects enable row level security;
+    grant usage on schema storage to authenticated;
+    grant usage on schema storage to anon;
+    grant select,insert,update,delete on storage.objects to authenticated,anon;`);
   for (const file of (await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort()) {
     await db.exec(await readFile('supabase/migrations/'+file,'utf8'));
   }

@@ -67,7 +67,7 @@ if (!cloudEnabled) {
         if (conflict.key !== '@references') {
           const select = document.createElement('select'); select.setAttribute('aria-label', conflict.key + ' 冲突选择');
           const options = [['', '请选择'], ['cloud', '保留云端 / 跳过来源']];
-          if (!deleted.has(conflict.key)) options.push(['source', '使用来源值']);
+          if (!conflict.keepCloudOnly && !deleted.has(conflict.key)) options.push(['source', '使用来源值']);
           if (conflict.key.startsWith('sessions/') && conflict.source !== null && !deleted.has(conflict.key)) options.push(['both', '保留两条学习记录']);
           for (const [value, text] of options) { const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option); }
           select.addEventListener('change', () => { choices[conflict.key] = select.value as 'cloud' | 'source' | 'both'; renderPreview(); });
@@ -123,7 +123,7 @@ if (!cloudEnabled) {
       materialize(data as Entity[]);
       download({ format: 'hikari-desk-cloud', version: 1, schema: 1, exportedAt: new Date().toISOString(),
         rows: data, sha256: await digest(data) }, 'cloud-backup');
-      message.textContent = '完整云端备份已生成（含删除墓碑）。待同步修改请另行导出队列。';
+      message.textContent = '完整云端备份已生成（含备考任务、资料元数据和删除墓碑）。资料文件本体请在备考资料视图逐项下载归档；待同步修改请另行导出队列。';
     }));
     const outbox = async () => {
       const cache = await pendingBackup();

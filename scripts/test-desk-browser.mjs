@@ -9,6 +9,7 @@ import { chromium, devices } from 'playwright-core';
 import { deskDatabase, userA, userB } from './fixtures/desk-db.mjs';
 import { academic, record } from './fixtures/academic.mjs';
 import { diff, materialize } from '../src/features/desk/entities.ts';
+import { testPrepBrowser } from './test-prep-browser.mjs';
 
 const database=await deskDatabase();
 await database.commit(userA,randomUUID(),diff([],academic().data));
@@ -20,13 +21,69 @@ const user = id => ({id,aud:'authenticated',role:'authenticated',email:id===user
   app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()});
 const mime={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',webmanifest:'application/manifest+json'};
 let failRead=false, loseResponse=false, commits=0;
+const files = new Map();
+const prepBucket = '/storage/v1/object/desk-prep-files';
+const synthetic = {
+  commit: { failures: 0, delayMs: 0 },
+  snapshotDelayMs: 0,
+  storage: {
+    failures: { delete: 0 },
+    delayMs: { upload: 0, download: 0 },
+    requests: [],
+  },
+};
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function storage(req, res, url, send) {
+  const owner = tokens.get(req.headers.authorization?.replace('Bearer ', ''));
+  if (!owner) return send(401, { message: 'unauthorized' });
+  const path = url.pathname.slice(prepBucket.length + 1);
+  const own = key => key.startsWith(owner + '/') && /^[0-9a-f-]+$/.test(key.split('/')[1] ?? '') && key.split('/').length === 2;
+  synthetic.storage.requests.push({ method: req.method, path });
+  if (req.method === 'GET') {
+    if (!own(path) || !files.has(path)) return send(404, { statusCode: '404', message: 'Object not found' });
+    const file = files.get(path);
+    res.writeHead(200, { 'Content-Type': file.type, 'Cache-Control': 'no-store' });
+    if (synthetic.storage.delayMs.download) {
+      res.write(file.bytes.subarray(0, 64 * 1024));
+      await delay(synthetic.storage.delayMs.download);
+      res.end(file.bytes.subarray(64 * 1024));
+    } else res.end(file.bytes);
+    return;
+  }
+  if (req.method === 'POST' && synthetic.storage.delayMs.upload) await delay(synthetic.storage.delayMs.upload);
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  if (req.method === 'DELETE') {
+    if (synthetic.storage.failures.delete) {
+      synthetic.storage.failures.delete--;
+      return send(503, { statusCode: '503', message: 'synthetic storage delete failure' });
+    }
+    const { prefixes } = JSON.parse(body);
+    if (prefixes.some(key => !own(key))) return send(403, { message: 'forbidden' });
+    const removed = prefixes.filter(key => files.delete(key));
+    return send(200, removed.map(name => ({ name })));
+  }
+  if (req.method !== 'POST' || !own(path)) return send(403, { message: 'forbidden' });
+  if (files.has(path)) return send(409, { statusCode: '409', message: 'The resource already exists' });
+  const request = new Request(url, {
+    method: 'POST', headers: { 'Content-Type': req.headers['content-type'] }, body,
+  });
+  const form = await request.formData();
+  const file = [...form.values()].find(entry => entry instanceof Blob);
+  files.set(path, { bytes: Buffer.from(await file.arrayBuffer()), type: file.type });
+  return send(200, { Key: 'desk-prep-files/' + path, Id: randomUUID() });
+}
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin','*');
-  res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');
+  res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info,x-upsert');
   if(req.method==='OPTIONS') {res.writeHead(200).end();return;}
   const url=new URL(req.url,'http://localhost');
   const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json'}).end(JSON.stringify(data));};
   try {
+    if (url.pathname === prepBucket || url.pathname.startsWith(prepBucket + '/')) {
+      return await storage(req, res, url, send);
+    }
     if(url.pathname.startsWith('/auth/v1/')) {
       let raw='';for await(const chunk of req)raw+=chunk;
       const input=raw?JSON.parse(raw):{};
@@ -45,15 +102,24 @@ const server=createServer(async(req,res)=>{
       const id=tokens.get(req.headers.authorization?.replace('Bearer ',''));
       if(!id) { console.log('API AUTH FAILED',url.pathname); return send(401,{code:'42501',message:'unauthorized'}); }
       if(failRead && url.pathname.endsWith('/desk_snapshot'))return send(503,{message:'synthetic outage'});
+      req.setEncoding('utf8');
       let raw='';for await(const chunk of req)raw+=chunk;
       const input=raw?JSON.parse(raw):{};
       if(url.pathname.endsWith('/desk_commit')) {
+        if (synthetic.commit.delayMs) await delay(synthetic.commit.delayMs);
+        if (synthetic.commit.failures) {
+          synthetic.commit.failures--;
+          return send(503, { message: 'synthetic commit outage' });
+        }
         commits++;
         const data=await database.commit(id,input.operation_id,input.changes);
         if(loseResponse) {loseResponse=false;req.socket.destroy();return;}
         return send(200,data);
       }
-      if(url.pathname.endsWith('/desk_snapshot'))return send(200,await database.snapshot(id));
+      if(url.pathname.endsWith('/desk_snapshot')) {
+        if (synthetic.snapshotDelayMs) await delay(synthetic.snapshotDelayMs);
+        return send(200,await database.snapshot(id));
+      }
     }
     const path=url.pathname.endsWith('/')?url.pathname+'index.html':url.pathname;
     const bytes=await readFile(join('dist-cloud',path));
@@ -82,6 +148,12 @@ try {
     try { await page.locator('[data-sync]').filter({hasText:'已同步'}).waitFor(); } catch (error) { console.log('LOGIN DEBUG',await page.locator('body').innerText(),errors); throw error; }
   }
   async function open(page,name) {await page.getByRole('navigation',{name:'学习工作台导航'}).getByRole('button',{name,exact:true}).click();}
+  async function saveTimezone(page, timezone) {
+    await page.getByLabel('时区（IANA）',{exact:true}).fill(timezone);
+    await page.getByRole('button',{name:'保存设置',exact:true}).click();
+    await page.locator('#study-status').filter({hasText:'设置已保存'}).waitFor();
+    await page.locator('[data-sync]').filter({hasText:'已同步'}).waitFor();
+  }
   async function add(page,minutes) {
     await open(page,'概览');await page.getByRole('button',{name:'快速补录',exact:true}).click();
     const form=page.locator('form[data-form=session]');await form.getByLabel('科目或项目').selectOption('school-0');
@@ -89,6 +161,46 @@ try {
     await page.locator('#study-status').filter({hasText:'学习记录已保存'}).waitFor();
   }
   await a.goto('/desk/study/');
+  const prepRoute = '/desk/academic/prep/';
+  async function verifyPrepWeek(page, expected) {
+    await page.goto(prepRoute);
+    await page.waitForURL(url => url.searchParams.get('week') === expected);
+    await page.getByRole('button',{name:'上一周',exact:true}).click();
+    await page.getByRole('button',{name:'当前周',exact:true}).click();
+    assert.equal(new URL(page.url()).searchParams.get('week'), expected);
+    await page.locator('[data-import-file]').setInputFiles({
+      name:'合成周次.md', mimeType:'text/markdown',
+      buffer:Buffer.from('# 高等数学期末备考计划\n\n## 第 1 周\n\n- [ ] 合成日期任务\n'),
+    });
+    const modal = page.locator('dialog[open]');
+    assert.equal(await modal.locator('[data-import-week-one]').inputValue(), expected);
+    await modal.getByRole('button',{name:'取消',exact:true}).click();
+  }
+  const boundaryContext=await browser.newContext({...devices['iPhone 13'],baseURL:base});
+  try {
+    const boundary=await boundaryContext.newPage();
+    boundary.on('pageerror',error=>errors.push(error.message));
+    boundary.setDefaultTimeout(20000);
+    await boundary.clock.setFixedTime(new Date('2026-11-29T16:30:00Z'));
+    await login(boundary,'a@example.test','/desk/study/');
+    await open(boundary,'概览');
+    await boundary.getByText('2026-11-30 至 12-06',{exact:true}).waitFor();
+    await boundary.getByRole('button',{name:'设置',exact:true}).click();
+    await saveTimezone(boundary,'America/New_York');
+    await open(boundary,'概览');
+    await boundary.getByText('2026-11-23 至 11-29',{exact:true}).waitFor();
+    assert.equal(materialize(await database.snapshot(userA)).settings.timezone,'America/New_York');
+    await verifyPrepWeek(boundary,'2026-11-23');
+    await boundary.goto('/desk/study/');
+    await boundary.getByRole('button',{name:'设置',exact:true}).click();
+    await saveTimezone(boundary,'Asia/Shanghai');
+    await open(boundary,'概览');
+    await boundary.getByText('2026-11-30 至 12-06',{exact:true}).waitFor();
+    await verifyPrepWeek(boundary,'2026-11-30');
+  } finally {
+    await boundaryContext.close();
+  }
+  console.log('Account settings timezone changes the current Monday week on both sides of the boundary and restores cleanly.');
   const originalLegacy={format:'hikari-study-dashboard',version:2,data:academic().data};
   await a.evaluate(value=>new Promise((resolve,reject)=>{
     const request=indexedDB.open('hikari-study-dashboard',2);
@@ -236,6 +348,7 @@ try {
   assert.deepEqual(errors,[]);
   assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   console.log('Logout privacy, different-account cache isolation and mobile-width layout verified.');
+  await testPrepBrowser({ browser, devices, base, login, database, files, synthetic });
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await database.db.close();
 }

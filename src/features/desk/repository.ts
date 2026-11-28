@@ -4,6 +4,7 @@ import { assertValid, reconcileReferences, type StudyRepository } from '../study
 import { apply, diff, materialize, equal, keyOf, type Entity } from './entities.ts';
 import { cacheRead, cacheWrite, exclusive, type Cache } from './cache.ts';
 import { client, owner } from './client.ts';
+import { fileMergeBlocked, fileMergeMessage } from './migration.ts';
 
 export type SyncState = 'synced' | 'pending' | 'offline' | 'failed' | 'conflict';
 export function syncStatus(state: SyncState, count = 0, detail = '') {
@@ -37,10 +38,9 @@ async function synchronize(user: string, cache: Cache) {
         throw error;
       }
       // Persist acknowledgement before advancing to the next queued operation.
-      cache.rows = snapshot(data);
-      cache.pending.shift();
-      cache.initialized = true;
-      await cacheWrite(user, cache);
+      const next = { ...cache, rows: snapshot(data), pending: cache.pending.slice(1), initialized: true };
+      await cacheWrite(user, next);
+      Object.assign(cache, next);
     }
     const { data, error } = await client().rpc('desk_snapshot');
     if (error) throw error;
@@ -57,7 +57,19 @@ async function synchronize(user: string, cache: Cache) {
 export function projected(cache: Cache): Entity[] {
   return cache.pending.reduce((rows, operation) => apply(rows, operation.changes), cache.rows);
 }
-type CloudRepository = StudyRepository & { merge(expected: DeskData, approved: DeskData, tombstones: Entity[]): Promise<DeskData> };
+export type WriteOutcome = 'confirmed' | 'pending' | 'conflict';
+export function pendingWriteMessage(outcome: Exclude<WriteOutcome, 'confirmed'>) {
+  return outcome === 'conflict'
+    ? '修改已暂存于此设备，但同步存在冲突。请前往数据中心处理。'
+    : '修改已暂存于此设备，待同步。请查看同步状态。';
+}
+type Update = Parameters<StudyRepository['update']>[0];
+type OnLocalCommit = (data: DeskData) => void;
+type WriteResult = { data: DeskData; outcome: WriteOutcome };
+type CloudRepository = StudyRepository & {
+  updateWithOutcome(change: Update, onLocalCommit?: OnLocalCommit): Promise<WriteResult>;
+  merge(expected: DeskData, approved: DeskData, tombstones: Entity[]): Promise<DeskData>;
+};
 export async function openCloudRepository(): Promise<CloudRepository> {
   const user = await owner();
   let closed = false;
@@ -75,10 +87,11 @@ export async function openCloudRepository(): Promise<CloudRepository> {
       return data;
     });
   }
-  const mutate = (change: Parameters<StudyRepository['update']>[0], at?: number, tombstones: Entity[] = []) => exclusive(user, async () => {
+  const mutate = (change: Update, at?: number, tombstones: Entity[] = [], onLocalCommit?: OnLocalCommit) => exclusive<WriteResult>(user, async () => {
       await check();
       const cache = await cacheRead(user);
       await synchronize(user, cache);
+      await check();
       if (cache.conflict) throw new Error('待同步操作存在冲突，请先在数据中心处理。');
       const rows = projected(cache);
       const data = materialize(rows);
@@ -96,22 +109,32 @@ export async function openCloudRepository(): Promise<CloudRepository> {
         if (old) throw new Error('来源删除尚未在预览中确认。');
         changes.push({ kind: tombstone.kind, id: tombstone.id, ordinal: tombstone.ordinal, payload: null, expected: null, deleted: true });
       }
-      if (changes.length) {
-        cache.pending.push({ id: crypto.randomUUID(), changes });
+      const operationId = changes.length ? crypto.randomUUID() : undefined;
+      if (operationId) {
+        cache.pending.push({ id: operationId, changes });
         await cacheWrite(user, cache); // No successful acceptance before IndexedDB commits.
         syncStatus('pending', cache.pending.length);
         announce();
+        onLocalCommit?.(data);
         await synchronize(user, cache);
       }
       await check();
-      return materialize(projected(cache));
+      const pending = operationId ? cache.pending.some(operation => operation.id === operationId) : cache.pending.length > 0;
+      const outcome = pending ? (cache.conflict ? 'conflict' : 'pending') : 'confirmed';
+      return { data: materialize(projected(cache)), outcome };
     });
   return {
-    read, update: mutate,
-    merge: (expected, approved, tombstones) => mutate(state => {
+    read,
+    update: async (change, at) => (await mutate(change, at)).data,
+    updateWithOutcome: (change, onLocalCommit) => mutate(change, undefined, [], onLocalCommit),
+    merge: async (expected, approved, tombstones) => (await mutate(state => {
       if (!equal(state, expected)) throw new Error('云端或学业状态已改变，请重新选择文件并预览。');
+      const approvedMaterials = new Map((approved.prepMaterials ?? []).map(item => [item.id, item]));
+      const removed = new Set(tombstones.filter(row => row.kind === 'prepMaterials').map(row => row.id));
+      if (state.prepMaterials?.some(item => fileMergeBlocked(item,
+        removed.has(item.id) ? undefined : approvedMaterials.get(item.id)))) throw new Error(fileMergeMessage);
       Object.assign(state, structuredClone(approved));
-    }, undefined, tombstones),
+    }, undefined, tombstones)).data,
     restore: async () => { throw new Error('云端模式禁止整库覆盖。请打开数据中心，预览并合并备份。'); },
     close: () => { closed = true; },
   };

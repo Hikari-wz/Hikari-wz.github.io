@@ -18,6 +18,9 @@ import '@/features/academic/academic.css';
       <button type="button" data-view="results"><Icon name="check" size={20} />成果</button>
       <button type="button" data-view="review"><Icon name="book" size={20} />周报</button>
     </nav>
+    {import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud' && (
+      <p><a class="study-action" href="/desk/academic/prep/">课程学习与备考中心</a></p>
+    )}
     <p class="study-status" data-academic-status role="status"></p>
     <div data-academic-content aria-busy="true" tabindex="-1"><p>正在打开学业中心…</p></div>
     <noscript><p>请启用 JavaScript，以便保存和读取学业数据。</p></noscript>

@@ -1,10 +1,16 @@
 import type { DeskData } from '../academic/model.ts';
+import type { PrepMaterial } from '../prep/model.ts';
 import { assertValid } from '../study/storage.ts';
 import { canonical, equal, flatten, keyOf, materialize, type Entity } from './entities.ts';
-export interface Conflict { key: string; cloud: unknown; source: unknown; reason: string }
+export interface Conflict { key: string; cloud: unknown; source: unknown; reason: string; keepCloudOnly?: boolean }
 export interface Preview {
   data: DeskData; tombstones: Entity[]; removed: number; added: number; duplicates: number; conflicts: Conflict[];
   before: { count: number; minutes: number }; after: { count: number; minutes: number };
+}
+export const fileMergeMessage = '来源会改变现有文件的类型或删除状态。请保留云端资料。如需删除，请到课程资料页处理文件。';
+export function fileMergeBlocked(current: PrepMaterial, incoming?: PrepMaterial) {
+  if (current.kind !== 'file') return incoming?.kind === 'file';
+  return incoming?.kind !== 'file' || Boolean(current.removing) !== Boolean(incoming.removing);
 }
 export const totals = (data: DeskData) => ({ count: data.sessions.length, minutes: data.sessions.reduce((n, row) => n + row.minutes, 0) });
 // Preview is recomputed in the committing transaction. It never writes or modifies a source.
@@ -17,6 +23,11 @@ export function mergePreview(cloud: DeskData, source: DeskData, deleted: Set<str
   const conflict = (key: string, row: Entity, old: Entity | undefined, reason: string) => {
     const choice = choices[key];
     if (choice === 'cloud') return;
+    if (old?.kind === 'prepMaterials' &&
+      fileMergeBlocked(old.payload as PrepMaterial, row.payload as PrepMaterial)) {
+      conflicts.push({ key, cloud: old.payload, source: row.payload, reason: fileMergeMessage, keepCloudOnly: true });
+      return;
+    }
     if (choice === 'source' && !deleted.has(key)) { target.set(key, row); return; }
     // Both only for independent study sessions. Stable suffix makes repeated merge idempotent.
     if (choice === 'both' && row.kind === 'sessions' && !deleted.has(key)) {
@@ -75,6 +86,12 @@ export function mergePreview(cloud: DeskData, source: DeskData, deleted: Set<str
     const key = keyOf(row);
     if (deleted.has(key)) { duplicates++; continue; }
     const old = target.get(key);
+    if (old?.kind === 'prepMaterials' && fileMergeBlocked(old.payload as PrepMaterial)) {
+      if (choices[key] !== 'cloud') conflicts.push({
+        key, cloud: old.payload, source: null, reason: fileMergeMessage, keepCloudOnly: true,
+      });
+      continue;
+    }
     if (old && choices[key] !== 'source') {
       if (choices[key] !== 'cloud') conflicts.push({ key, cloud: old.payload, source: null, reason: '来源备份已删除此项，云端仍有记录。确认来源删除或保留云端。' });
       continue;

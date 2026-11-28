@@ -15,7 +15,7 @@
     "test:browser": "node scripts/test-browser.mjs",
     "test:study": "node --test scripts/test-study.mjs && node scripts/test-study-browser.mjs",
     "test:academic": "node --test scripts/test-academic.mjs && node scripts/test-academic-browser.mjs",
-    "test:desk": "node --test scripts/test-desk.mjs && node scripts/test-desk-browser.mjs"
+    "test:desk": "node --test scripts/test-desk.mjs scripts/test-prep-import.mjs && node scripts/test-desk-browser.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.10",
@@ -26,7 +26,9 @@
     "astro": "^7.4.13",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
-    "tailwindcss": "^4.3.5"
+    "remark-parse": "11.0.0",
+    "tailwindcss": "^4.3.5",
+    "unified": "11.0.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",

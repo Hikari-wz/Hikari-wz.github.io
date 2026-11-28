@@ -1,0 +1,52 @@
+---
+import Site from '@/layouts/Site.astro';
+import '@/features/study/study.css';
+import '@/features/prep/prep.css';
+import '@/features/prep/prep-materials.css';
+---
+<Site
+  title="课程学习与备考中心"
+  description={import.meta.env.PUBLIC_DESK_DATA_MODE === 'cloud'
+    ? '按学期与课程组织每周学习路线、任务和私人资料，登录后跨设备共享。'
+    : '课程学习与备考中心。'}
+  viewportFit
+>
+  <div class="study prep" id="prep">
+    <header class="study-header prep-header">
+      <div>
+        <a class="study-breadcrumb" href="/desk/" lang="en">Desk</a>
+        <h1>课程学习与备考中心</h1>
+      </div>
+      <div class="prep-header-actions">
+        <button class="study-action primary" type="button" data-action="import-open" disabled>导入 Markdown</button>
+        <a class="study-action prep-data-link" href="/desk/data/">数据中心</a>
+      </div>
+    </header>
+    <p class="study-status" id="prep-status" role="status" aria-live="polite"></p>
+    <div
+      class="prep-content"
+      id="prep-content"
+      data-prep-view="loading"
+      aria-busy="true"
+      tabindex="-1"
+    >
+      <section class="study-card prep-loading" aria-labelledby="prep-loading-title">
+        <h2 id="prep-loading-title">正在打开课程学习与备考中心…</h2>
+        <p>正在读取课程、每周任务与私人资料。</p>
+      </section>
+    </div>
+    <input
+      class="prep-import-input"
+      id="prep-import-file"
+      type="file"
+      accept=".md,.markdown,text/markdown,text/plain"
+      data-import-file="global"
+      aria-label="选择 Markdown 备考计划"
+      hidden
+    />
+    <noscript><p>请启用 JavaScript，以便保存和读取课程备考数据。</p></noscript>
+  </div>
+</Site>
+<script>
+  import '@/features/prep/app.ts';
+</script>
