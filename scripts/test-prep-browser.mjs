@@ -1,14 +1,41 @@
 import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { diff, materialize } from '../src/features/desk/entities.ts';
 import { userA, userB } from './fixtures/desk-db.mjs';
 
 const route = '/desk/academic/prep/';
 const title = '合成备考任务';
 const imported = '合成闭卷练习';
 const secondTask = '合成回顾任务';
+const slowTitle = '合成慢速勾选';
+const retryTask = '合成503重试任务';
+const retrySecondTask = '合成503第二任务';
 const fileBytes = Buffer.from('# 合成附件\n\n测试正文。\n\n<script>globalThis.prepUnsafe = true</script>');
 
-export async function testPrepBrowser({ browser, devices, base, login, database, files }) {
+async function addCourseAlias(database, subjectId, name) {
+  const rows = await database.snapshot(userA);
+  const state = materialize(rows);
+  if (!state.academic.aliases.some(alias => alias.subjectId === subjectId && alias.name === name)) {
+    state.academic.aliases.push({ subjectId, name });
+    await database.commit(userA, randomUUID(), diff(rows, state));
+  }
+}
+
+function markdownPlan(course, taskTitle, extraTitle = '') {
+  return Buffer.from(`# 高等数学期末备考计划
+
+| 字段 | 内容 |
+| --- | --- |
+| 科目 | ${course} |
+
+## 第 1 周
+
+- [ ] ${taskTitle}
+${extraTitle ? `- [ ] ${extraTitle}\n` : ''}`);
+}
+
+export async function testPrepBrowser({ browser, devices, base, login, database, files, synthetic }) {
   const contexts = await Promise.all([
     browser.newContext({ ...devices['iPhone 13'], baseURL: base }),
     browser.newContext({ ...devices['iPad Mini'], baseURL: base }),
@@ -38,10 +65,70 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     await link(phone, '高等数学').click();
     await phone.locator('[data-prep-tab=routes]').waitFor();
     await button(phone, '资料').waitFor();
+
+    const previewPlan = async plan => {
+      await phone.locator('[data-import-file]').first().setInputFiles({
+        name: '合成计划.md', mimeType: 'text/markdown', buffer: plan,
+      });
+      const dialog = phone.locator('dialog[open]').filter({ hasText: '确认 Markdown 导入' });
+      await dialog.waitFor();
+      return dialog;
+    };
+    let preview = await previewPlan(markdownPlan('大学英语（一）', '合成安全别名任务'));
+    assert.equal(await preview.locator('select[name=destinationCourse]').inputValue(), 'school-1');
+    await preview.getByText(/准备导入到“大学英语”/).waitFor();
+    await button(preview, '取消').click();
+    await preview.waitFor({ state: 'detached' });
+
+    preview = await previewPlan(markdownPlan('不存在的合成课程', '合成未匹配任务'));
+    await preview.getByText(/来源课程未匹配当前学期的课程/).waitFor();
+    assert.equal(await preview.locator('select[name=destinationCourse]').inputValue(), '');
+    assert.ok(await button(preview, '确认导入').isDisabled());
+    await button(preview, '取消').click();
+    await preview.waitFor({ state: 'detached' });
+
+    await addCourseAlias(database, 'school-0', '大学英语（一）');
+    await phone.reload();
+    await synced(phone);
+    preview = await previewPlan(markdownPlan('大学英语（一）', '合成歧义任务'));
+    await preview.getByText(/来源课程匹配到多个目标/).waitFor();
+    assert.equal(await preview.locator('select[name=destinationCourse]').inputValue(), '');
+    assert.ok(await button(preview, '确认导入').isDisabled());
+    await button(preview, '取消').click();
+    await preview.waitFor({ state: 'detached' });
+    console.log('Prep import alias stays unique; unmatched and ambiguous source courses require an explicit destination.');
+
     await phone.locator('button[data-action=task-add]').first().click();
     await phone.getByLabel('任务标题', { exact: true }).fill(title);
     await phone.locator('dialog[open] form button[type=submit]').click();
     await row(phone, title).waitFor();
+
+    await phone.locator('button[data-action=task-add]').first().click();
+    await phone.getByLabel('任务标题', { exact: true }).fill(slowTitle);
+    await phone.locator('dialog[open] form button[type=submit]').click();
+    await row(phone, slowTitle).waitFor();
+    synthetic.commit.delayMs = 2_000;
+    let slowBox = row(phone, slowTitle).getByRole('checkbox');
+    await slowBox.check();
+    await phone.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
+    assert.ok(await slowBox.isDisabled(), 'Task checkbox must be disabled as soon as the save begins.');
+    await slowBox.click({ force: true });
+    await phone.reload();
+    await synced(phone);
+    slowBox = row(phone, slowTitle).getByRole('checkbox');
+    assert.ok(await slowBox.isChecked());
+    assert.ok(!(await slowBox.isDisabled()));
+    await slowBox.uncheck();
+    await phone.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
+    assert.ok(await slowBox.isDisabled(), 'The second toggle must use the same visible save lock.');
+    await phone.reload();
+    await synced(phone);
+    slowBox = row(phone, slowTitle).getByRole('checkbox');
+    assert.ok(!(await slowBox.isChecked()));
+    assert.ok(!(await slowBox.isDisabled()));
+    synthetic.commit.delayMs = 0;
+    console.log('Slow task saves disable the checkbox, expose 待同步, survive reloads and apply the second toggle.');
+
     await tablet.reload();
     await synced(tablet);
     await row(tablet, title).waitFor();
@@ -71,11 +158,14 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     await synced(phone);
     await selectPlan();
     await phone.locator('dialog[open]').getByText(/独立作答/).first().waitFor();
+    for (const item of await phone.locator('dialog[open] [data-import-item]').all()) await item.check();
     await button(phone, '确认导入').click();
     await row(phone, imported).waitFor();
     await row(phone, secondTask).locator('[data-action=task-up]').click();
     await phone.locator('#prep-status').filter({ hasText: '任务顺序已更新' }).waitFor();
-    assert.match(await phone.locator('[data-prep-week="2026-11-23"] [data-task-id]').first().innerText(), /合成回顾任务/);
+    const displayed = await phone.locator('[data-prep-week="2026-11-23"] [data-task-id]').allTextContents();
+    const importedOrder = displayed.filter(text => text.includes(imported) || text.includes(secondTask));
+    assert.match(importedOrder[0], /合成回顾任务/);
     await row(phone, imported).getByRole('checkbox').check();
     await phone.locator('#prep-status').filter({ hasText: '任务已完成' }).waitFor();
     await tablet.goto(route);
@@ -89,6 +179,26 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     assert.ok(await row(phone, imported).getByRole('checkbox').isChecked());
 
     await phone.keyboard.press('Escape');
+    synthetic.commit.failures = 1;
+    const retryPlan = markdownPlan('高等数学', retryTask, retrySecondTask);
+    await phone.locator('[data-import-file]').first().setInputFiles({
+      name: '合成503计划.md', mimeType: 'text/markdown', buffer: retryPlan,
+    });
+    const retryDialog = phone.locator('dialog[open]').filter({ hasText: '确认 Markdown 导入' });
+    await retryDialog.locator('[data-import-item]').last().waitFor();
+    for (const item of await retryDialog.locator('[data-import-item]').all()) await item.check();
+    await button(retryDialog, '确认导入').click();
+    await phone.locator('#prep-status').filter({ hasText: '待同步' }).waitFor();
+    assert.doesNotMatch(await phone.locator('#prep-status').innerText(), /已导入/);
+    assert.equal(synthetic.commit.failures, 0);
+    assert.ok(!(await database.snapshot(userA)).some(row => row.kind === 'prepTasks' && row.payload?.title === retryTask));
+    await phone.reload();
+    await synced(phone);
+    await row(phone, retryTask).waitFor();
+    assert.ok((await database.snapshot(userA)).some(row => row.kind === 'prepTasks' && row.payload?.title === retryTask));
+    assert.ok((await database.snapshot(userA)).some(row => row.kind === 'prepTasks' && row.payload?.title === retrySecondTask));
+    console.log('A 503 import remains unconfirmed in 待同步 state, then succeeds after reload retry.');
+
     await button(phone, '资料').click();
     await phone.locator('[data-prep-input=upload]').setInputFiles({
       name: '合成资料.md', mimeType: 'text/markdown', buffer: fileBytes,
@@ -102,6 +212,32 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     const download = phone.waitForEvent('download');
     await material.getByRole('button', { name: '下载', exact: true }).click();
     assert.deepEqual(await readFile(await (await download).path()), fileBytes);
+
+    const guardBytes = Buffer.from('# 删除保护\n\n仅用于验证元数据确认后的文件清理顺序。\n');
+    await phone.locator('[data-prep-input=upload]').setInputFiles({
+      name: '合成删除保护.md', mimeType: 'text/markdown', buffer: guardBytes,
+    });
+    let guarded = phone.locator('li.prep-material').filter({ hasText: '合成删除保护.md' });
+    await guarded.getByRole('button', { name: '下载', exact: true }).waitFor();
+    const filesBeforeGuard = files.size;
+    const deletesBeforeGuard = synthetic.storage.requests.filter(request => request.method === 'DELETE').length;
+    synthetic.commit.failures = 1;
+    await guarded.getByRole('button', { name: '删除', exact: true }).click();
+    await guarded.getByRole('button', { name: '继续删除', exact: true }).waitFor();
+    assert.equal(
+      synthetic.storage.requests.filter(request => request.method === 'DELETE').length,
+      deletesBeforeGuard,
+      'Storage must not be deleted until the removing metadata is cloud-confirmed.',
+    );
+    assert.equal(files.size, filesBeforeGuard);
+    synthetic.storage.failures.delete = 1;
+    await guarded.getByRole('button', { name: '继续删除', exact: true }).click();
+    await phone.locator('.prep-materials__status').filter({ hasText: '删除云端文件失败' }).waitFor();
+    assert.equal(files.size, filesBeforeGuard);
+    await guarded.getByRole('button', { name: '继续删除', exact: true }).click();
+    await guarded.waitFor({ state: 'detached' });
+    assert.equal(files.size, filesBeforeGuard - 1);
+    console.log('Prep file deletion waits for cloud metadata confirmation and resumes cleanly after failure.');
 
     await desktop.reload();
     await synced(desktop);
@@ -125,6 +261,23 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     assert.ok(backup.rows.some(item => item.kind === 'prepMaterials' && item.payload?.name === '合成资料（重命名）'));
     assert.ok(!JSON.stringify(backup).includes('globalThis.prepUnsafe'));
 
+    const liveFile = backup.rows.find(item => item.kind === 'prepMaterials' && !item.deleted && item.payload?.kind === 'file');
+    const withDeletion = backup.rows.map(item => item === liveFile
+      ? { ...item, deleted: true, payload: null }
+      : item);
+    const restore = { ...backup, rows: withDeletion, sha256: createHash('sha256').update(JSON.stringify(withDeletion)).digest('hex') };
+    await tablet.locator('[data-source]').setInputFiles({
+      name: '合成附件墓碑.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(restore)),
+    });
+    const conflict = tablet.locator('[data-preview] details').filter({ hasText: '请保留云端资料' });
+    await conflict.locator('summary').click();
+    assert.deepEqual(await conflict.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'cloud']);
+    await conflict.locator('select').selectOption('cloud');
+    await button(tablet, '确认合并到云端').click();
+    await tablet.locator('[data-message]').filter({ hasText: '云端确认' }).waitFor();
+    assert.ok((await database.snapshot(userA)).some(item => item.kind === 'prepMaterials' && item.id === liveFile.id && !item.deleted));
+    assert.equal(files.size, 1);
+
     // Simulate restoring metadata into an account whose object must be supplied separately.
     files.clear();
     await renamed.getByRole('button', { name: '阅读', exact: true }).click();
@@ -147,6 +300,31 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
     const linkItem = phone.locator('li.prep-material').filter({ hasText: '合成学习链接' });
     assert.equal(await linkItem.getByRole('link', { name: '打开', exact: true }).getAttribute('href'), 'https://example.test/notes');
 
+    const largeBytes = Buffer.alloc(24 * 1024 * 1024, 0x61);
+    const largeName = '合成24MiB慢速文件.bin';
+    synthetic.storage.delayMs.upload = 16_000;
+    synthetic.storage.delayMs.download = 16_000;
+    const uploadStarted = Date.now();
+    await phone.locator('[data-prep-input=upload]').setInputFiles({
+      name: largeName, mimeType: 'application/octet-stream', buffer: largeBytes,
+    });
+    const largeMaterial = phone.locator('li.prep-material').filter({ hasText: largeName });
+    await phone.locator('.prep-materials__status').filter({ hasText: '已上传' }).waitFor({ timeout: 45_000 });
+    assert.ok([...files.values()].some(file => file.bytes.length === largeBytes.length));
+    assert.ok(Date.now() - uploadStarted >= 15_000, 'The synthetic upload must exceed the former 15 second transfer timeout.');
+    const downloadStarted = Date.now();
+    const largeDownload = phone.waitForEvent('download', { timeout: 45_000 });
+    await largeMaterial.getByRole('button', { name: '下载', exact: true }).click();
+    const savedLarge = await largeDownload;
+    assert.ok(Date.now() - downloadStarted >= 15_000, 'The synthetic download must exceed the former 15 second transfer timeout.');
+    const fileHash = bytes => createHash('sha256').update(bytes).digest('hex');
+    assert.equal(fileHash(await readFile(await savedLarge.path())), fileHash(largeBytes));
+    synthetic.storage.delayMs.upload = 0;
+    synthetic.storage.delayMs.download = 0;
+    await largeMaterial.getByRole('button', { name: '删除', exact: true }).click();
+    await largeMaterial.waitFor({ state: 'detached' });
+    console.log('24 MiB upload and download each survive a synthetic 16 second delay and preserve the bytes.');
+
     await tablet.goto(route);
     await synced(tablet);
     for (const page of [phone, tablet, desktop]) {
@@ -156,9 +334,30 @@ export async function testPrepBrowser({ browser, devices, base, login, database,
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
     }
+    // Commit a remote edit after the local toggle is queued, before its delayed CAS.
+    const remoteRows = await database.snapshot(userA);
+    const remoteState = materialize(remoteRows);
+    const remoteTask = remoteState.prepTasks.find(task => task.title === slowTitle);
+    assert.equal(remoteTask.done, false);
+    remoteTask.notes = '合成另一设备编辑';
+    synthetic.commit.delayMs = 2_000;
+    await row(tablet, slowTitle).getByRole('checkbox').check();
+    await tablet.locator('[data-sync]').filter({ hasText: '待同步' }).waitFor();
+    await database.commit(userA, randomUUID(), diff(remoteRows, remoteState));
+    await tablet.locator('#prep-status').filter({ hasText: '同步存在冲突' }).waitFor();
+    assert.doesNotMatch(await tablet.locator('#prep-status').innerText(), /任务已完成/);
+    const remoteAfter = materialize(await database.snapshot(userA)).prepTasks.find(task => task.id === remoteTask.id);
+    assert.deepEqual(remoteAfter, remoteTask);
+    console.log('CAS conflict preserves the remote task and never reports the pending toggle as complete.');
+
     assert.deepEqual(errors, []);
-    console.log('Prep cloud browser: shared tasks, week navigation, import, private material viewing, restore, deletion and download on phone/tablet/desktop verified.');
+    console.log('Prep cloud browser: shared tasks, safe import matching, slow saves, retryable failures, guarded materials and long transfers verified.');
   } finally {
+    synthetic.commit.failures = 0;
+    synthetic.commit.delayMs = 0;
+    synthetic.storage.failures.delete = 0;
+    synthetic.storage.delayMs.upload = 0;
+    synthetic.storage.delayMs.download = 0;
     await Promise.all(contexts.map(context => context.close()));
   }
 }

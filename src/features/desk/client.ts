@@ -11,9 +11,18 @@ export function client() {
       try { if (JSON.parse(atob(key.split('.')[1])).role !== 'anon') throw new Error('禁止使用高权限 Key。'); }
       catch { throw new Error('客户端 Key 无效或权限过高。'); }
     }
+    const storageUrl = new URL(url.replace(/\/$/, '') + '/storage/v1/object/desk-prep-files/');
     instance = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-      global: { fetch: (input, init) => fetch(input, { ...init,
-        signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000) }) } });
+      global: { fetch: (input, init) => {
+        const request = input instanceof Request ? input : undefined;
+        const target = new URL(request?.url ?? String(input), url);
+        const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+        const transfer = target.origin === storageUrl.origin && target.pathname.startsWith(storageUrl.pathname) &&
+          (method === 'POST' || method === 'GET');
+        const timeout = AbortSignal.timeout(transfer ? 300_000 : 15_000);
+        const signal = init?.signal ?? request?.signal;
+        return fetch(input, { ...init, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+      } } });
   }
   return instance;
 }

@@ -1,5 +1,5 @@
 import { cloudEnabled, client } from '../desk/client.ts';
-import { openCloudRepository, pendingBackup, projected } from '../desk/repository.ts';
+import { openCloudRepository, pendingBackup, pendingWriteMessage, projected } from '../desk/repository.ts';
 import { prepareDesk } from '../desk/ui.ts';
 import { channelName } from '../study/storage.ts';
 import { localClock, monday, shiftDay, validDay } from '../study/time.ts';
@@ -49,7 +49,7 @@ let refreshGeneration = 0;
 let sessionOwner = '';
 const openWeeks = new Set<string>();
 
-const currentMonday = () => monday(localClock(Date.now(), 'Asia/Shanghai').day);
+const currentMonday = () => monday(localClock(Date.now(), data.settings.timezone).day);
 const tasksOf = (state: DeskData) => state.prepTasks ?? [];
 const materialsOf = (state: DeskData) => state.prepMaterials ?? [];
 const taskId = (id: string) => (task: PrepTask) => task.id === id;
@@ -327,6 +327,7 @@ function taskItem(task: PrepTask, detail = false) {
   const checkbox = element('input');
   checkbox.type = 'checkbox';
   checkbox.checked = task.done;
+  checkbox.disabled = busy;
   checkbox.dataset.action = 'task-toggle';
   checkbox.dataset.id = task.id;
   checkbox.dataset.focusKey = `task-toggle-${task.id}`;
@@ -563,8 +564,10 @@ function render() {
         read: () => materialsOf(data),
         update: async mutate => {
           if (!repository || blocked) throw new Error('当前页面已不能写入私人资料。');
-          data = await repository.update(mutate);
+          const saved = await repository.updateWithOutcome(mutate);
           if (blocked) throw new Error('登录状态已改变，请重新打开页面。');
+          data = saved.data;
+          return saved.outcome;
         },
       });
     }
@@ -575,19 +578,27 @@ function render() {
   refreshedAt = Date.now();
 }
 
-async function commit(change: (state: DeskData) => void, message: string) {
+async function commit(change: (state: DeskData) => void, message: string | (() => string)) {
   if (!repository || blocked) throw new Error('当前页面已不能写入私人数据，请重新打开。');
+  if (busy) throw new Error('正在保存任务，请稍候。');
   busy = true;
   content.setAttribute('aria-busy', 'true');
+  content.querySelectorAll<HTMLInputElement>('input[data-action="task-toggle"]').forEach(input => {
+    input.disabled = true;
+  });
+  notify('正在保存任务…');
   try {
-    data = await repository.update(change);
+    const saved = await repository.updateWithOutcome(change);
     if (blocked) return;
-    focusedKey = '';
-    render();
-    notify(message);
+    data = saved.data;
+    const feedback = saved.outcome === 'confirmed'
+      ? (typeof message === 'string' ? message : message())
+      : pendingWriteMessage(saved.outcome);
+    notify(feedback, saved.outcome === 'conflict');
   } finally {
     busy = false;
     content.setAttribute('aria-busy', 'false');
+    render();
   }
 }
 
@@ -856,20 +867,18 @@ function importTaskNote(taskNotes: string, globalNotes: string) {
   return [taskNotes.trim(), '课程全局说明\n' + notes].filter(Boolean).join('\n\n').slice(0, 10_000);
 }
 
-async function openImportPreview(
-  text: string,
-  sourceFile: File,
-  initialCourseId = route.courseId,
-) {
+async function openImportPreview(text: string, sourceFile: File) {
   const result = parsePrepMarkdown(text);
   const values = courseValues(data);
   if (!values.length) throw new Error('当前学期没有可导入的课程。');
-  const courseName = (value: string) => normalizedTitle(value).replace('中国近现代史纲要', '中国近代史纲要');
+  const courseName = (value: string) => normalizedTitle(value)
+    .replace(/^中国近现代史纲要$/, '中国近代史纲要')
+    .replace(/^大学英语[一1]$/, '大学英语');
   const sourceName = courseName(result.course);
-  const matches = values.filter(([id, label]) =>
+  const matches = sourceName ? values.filter(([id, label]) =>
     courseName(label) === sourceName || data.academic.aliases.some(alias =>
-      alias.subjectId === id && courseName(alias.name) === sourceName));
-  const destinationId = matches.length === 1 ? matches[0][0] : initialCourseId;
+      alias.subjectId === id && courseName(alias.name) === sourceName)) : [];
+  const destinationId = matches.length === 1 ? matches[0][0] : '';
   let weekOne = currentMonday();
   const modal = openDialog('确认 Markdown 导入', '先核对来源、目标课程、W1 周一日期、警告和去重结果。');
   const form = element('form', 'study-form prep-import-preview');
@@ -935,7 +944,9 @@ async function openImportPreview(
     weekOne = mondayInput.value;
     destinationSummary.textContent = destination.value
       ? `准备导入到“${courseLabel(data, destination.value)}”，W1 从 ${weekOne || '未填写'} 开始。点击“确认导入”后才会写入。`
-      : '请选择明确的导入目标课程。';
+      : matches.length > 1
+        ? '来源课程匹配到多个目标，请手动选择正确课程。'
+        : '来源课程未匹配当前学期的课程，请手动选择正确课程。';
     if (!validDay(weekOne) || monday(weekOne) !== weekOne) {
       resultHost.replaceChildren(element('p', 'study-status', 'W1 日期必须是周一。'));
       confirm.disabled = true;
@@ -965,7 +976,7 @@ async function openImportPreview(
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (!form.reportValidity()) return;
-    if (confirm.disabled) return;
+    if (confirm.disabled || !destination.value) return;
     if (warningApprove && !warningApprove.checked) {
       report(new Error('请先核对该 Markdown 文件的警告。'));
       return;
@@ -989,8 +1000,7 @@ async function openImportPreview(
       let added = 0;
       let skipped = 0;
       let notesAttached = false;
-      if (!repository || blocked) throw new Error('当前页面已不能写入私人任务。');
-      data = await repository.update(state => {
+      await commit(state => {
         const list = state.prepTasks ??= [];
         for (const row of selectedRows) {
           if (list.some(task => task.id === row.id)) {
@@ -1018,10 +1028,8 @@ async function openImportPreview(
           notesAttached = true;
           added += 1;
         }
-      });
+      }, () => `已导入 ${added} 项任务${skipped ? `，并发更新后跳过 ${skipped} 项` : ''}。`);
       modal.close();
-      render();
-      notify(`已导入 ${added} 项任务${skipped ? `，并发更新后跳过 ${skipped} 项` : ''}。`);
     });
   });
   await recompute();
@@ -1082,7 +1090,7 @@ function importAnalysisView(analysis: ImportAnalysis[], result: ReturnType<typeo
 
 async function processMarkdownSource(text: string, file: File) {
   if (!text.trim()) throw new Error('Markdown 内容为空。');
-  await openImportPreview(text, file, route.courseId);
+  await openImportPreview(text, file);
 }
 
 function interactionIsSafe() {
@@ -1192,10 +1200,11 @@ root.addEventListener('change', event => {
   }
   if (target.matches('input[data-action="task-toggle"]')) {
     const checkbox = target as HTMLInputElement;
-    void toggleTask(checkbox.dataset.id ?? '', checkbox.checked).catch(error => {
-      report(error);
-      render();
-    });
+    const task = tasksOf(data).find(taskId(checkbox.dataset.id ?? ''));
+    if (!task) { render(); return; }
+    if (busy) { checkbox.checked = task.done; return; }
+    focusedKey = checkbox.dataset.focusKey ?? '';
+    void toggleTask(task.id, checkbox.checked).catch(report);
   }
 });
 
@@ -1234,6 +1243,11 @@ root.addEventListener('click', event => {
   } else if (action === 'import-open') {
     root.querySelector<HTMLInputElement>('#prep-import-file')?.click();
   }
+});
+
+window.addEventListener('desk-sync', event => {
+  if ((event as CustomEvent<{ state: string }>).detail.state === 'synced' &&
+      status.textContent === pendingWriteMessage('pending')) notify('待同步修改已处理，请核对云端状态。');
 });
 
 window.addEventListener('popstate', () => {

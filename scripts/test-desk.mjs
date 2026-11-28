@@ -130,6 +130,42 @@ test('backup deletion history restores without resurrection and live deletion ne
   assert.equal(preview.conflicts.length,0);assert.equal(preview.after.count,0);assert.equal(preview.removed,1);
 });
 
+test('backup merge preserves an existing file and its deletion lifecycle', () => {
+  const { data: cloud, fileId } = prepFixture();
+  const key = 'prepMaterials/' + fileId;
+  const tombstone = { kind: 'prepMaterials', id: fileId, ordinal: 0, version: 2, payload: null, deleted: true };
+  const source = structuredClone(cloud);
+  source.prepMaterials = source.prepMaterials.filter(item => item.id !== fileId);
+
+  for (const choice of [undefined, 'source']) {
+    const preview = mergePreview(cloud, source, new Set(), choice ? { [key]: choice } : {}, [tombstone]);
+    assert.equal(preview.conflicts[0]?.keepCloudOnly, true);
+    assert.deepEqual(preview.tombstones, []);
+    assert.equal(preview.removed, 0);
+    assert.deepEqual(preview.data.prepMaterials, cloud.prepMaterials);
+  }
+  const keep = mergePreview(cloud, source, new Set(), { [key]: 'cloud' }, [tombstone]);
+  assert.equal(keep.conflicts.length, 0);
+  assert.deepEqual(keep.data.prepMaterials, cloud.prepMaterials);
+  assert.deepEqual(mergePreview(source, source, new Set(), {}, [tombstone]).tombstones, [tombstone]);
+
+  const link = structuredClone(cloud);
+  link.prepMaterials[0] = {
+    id: fileId, termId: 'term-test', courseId: 'school-0', name: '合成链接',
+    kind: 'link', url: 'https://example.test/file',
+  };
+  assert.equal(mergePreview(cloud, link, new Set(), { [key]: 'source' }).conflicts[0]?.keepCloudOnly, true);
+  assert.equal(mergePreview(link, cloud, new Set(), { [key]: 'source' }).conflicts[0]?.keepCloudOnly, true);
+  assert.deepEqual(mergePreview(source, cloud).data.prepMaterials.find(item => item.id === fileId), cloud.prepMaterials[0]);
+  const removing = structuredClone(cloud);
+  removing.prepMaterials[0].removing = true;
+  assert.equal(mergePreview(removing, cloud, new Set(), { [key]: 'source' }).conflicts[0]?.keepCloudOnly, true);
+  assert.equal(mergePreview(cloud, removing, new Set(), { [key]: 'source' }).conflicts[0]?.keepCloudOnly, true);
+  const renamed = structuredClone(cloud);
+  renamed.prepMaterials[0].name = '合成文件改名';
+  assert.deepEqual(mergePreview(cloud, renamed, new Set(), { [key]: 'source' }).data.prepMaterials, renamed.prepMaterials);
+});
+
 test('actual PostgreSQL migration, prep references, immutable storage paths, anonymous denial, user isolation, idempotency, CAS and deletion', async () => {
   const { db, as, commit, snapshot } = await deskDatabase();
   try {
@@ -306,5 +342,14 @@ test('actual PostgreSQL migration, prep references, immutable storage paths, ano
     rows=await commit(userA,randomUUID(),diff(rows,deleting));
     await as(userA,'delete from storage.objects where bucket_id=$1 and name=$2',['desk-prep-files',userA+'/'+confirmedFileId]);
     assert.equal((await db.query("select count(*)::int as count from storage.objects where bucket_id='desk-prep-files'")).rows[0].count,0);
+    const objectPath = userA + '/' + confirmedFileId;
+    const finishUpload = () => db.query('insert into storage.objects(bucket_id,name) values($1,$2)', ['desk-prep-files', objectPath]);
+    // The final Storage write can run as a service role, so a late upload must also be rejected outside RLS.
+    await assert.rejects(finishUpload(), /row-level security/i);
+    const deletedFile = materialize(rows);
+    deletedFile.prepMaterials = deletedFile.prepMaterials.filter(item => item.id !== confirmedFileId);
+    rows = await commit(userA, randomUUID(), diff(rows, deletedFile));
+    assert.ok(rows.some(row => row.kind === 'prepMaterials' && row.id === confirmedFileId && row.deleted));
+    await assert.rejects(finishUpload(), /row-level security/i);
   } finally { await db.close(); }
 });

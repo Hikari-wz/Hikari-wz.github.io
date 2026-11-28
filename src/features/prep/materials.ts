@@ -1,13 +1,14 @@
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { client, owner } from '../desk/client.ts';
+import { pendingWriteMessage, type WriteOutcome } from '../desk/repository.ts';
 import { prepMaterialFileLimit, prepMaterialPath, type DeskData, type PrepMaterial } from './model.ts';
 const BUCKET = 'desk-prep-files';
 const MARKDOWN_TEXT_LIMIT = 1024 * 1024;
 const parser = unified().use(remarkParse);
 interface Context {
   termId: string; courseId: string; onError: (error: unknown) => void; read: () => PrepMaterial[];
-  update: (mutate: (data: DeskData) => void) => Promise<void>;
+  update: (mutate: (data: DeskData) => void) => Promise<WriteOutcome>;
 }
 interface MdNode {
   type: string; value?: string; url?: string; alt?: string; depth?: number;
@@ -224,6 +225,11 @@ async function cloudMaterial(
   }
   await ensureOwner(ownerId);
 }
+function writeStatus(state: State, outcome: WriteOutcome, confirmed: string, next = '') {
+  state.error = outcome === 'conflict';
+  state.message = outcome === 'confirmed' ? confirmed : pendingWriteMessage(outcome) + next;
+}
+
 async function putObject(ownerId: string, id: string, file: File, type: string): Promise<'uploaded' | 'exists'> {
   const { error } = await client().storage.from(BUCKET).upload(prepMaterialPath(ownerId, id), file, {
     cacheControl: '0',
@@ -243,17 +249,20 @@ async function addFile(state: State, file: File): Promise<void> {
     name: safeName(file.name), kind: 'file', filename: safeFilename(file.name),
     mime: safeMime(file.type), bytes: file.size,
   };
-  await state.context.update((data) => { (data.prepMaterials ??= []).push(item); });
+  const outcome = await state.context.update((data) => { (data.prepMaterials ??= []).push(item); });
   state.missingId = item.id;
-  try {
-    await cloudMaterial(ownerId, item.id, (value) => value.removing !== true);
-    await ensureOwner(ownerId);
-    await cloudMaterial(ownerId, item.id, (value) => value.removing !== true);
-    await putObject(ownerId, item.id, file, item.mime ?? 'application/octet-stream');
-    await ensureOwner(ownerId);
-  } catch (error) {
-    throw new Error(`资料记录已保存，但文件字节尚未确认可下载。可稍后重新打开课程并点击“补充缺失文件”恢复。`);
+  if (outcome !== 'confirmed') {
+    writeStatus(state, outcome, '', '同步后可用“补充缺失文件”上传原文件。');
+    return;
   }
+  await cloudMaterial(ownerId, item.id, (value) => value.kind === 'file' && value.removing !== true);
+  try {
+    await putObject(ownerId, item.id, file, item.mime ?? 'application/octet-stream');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '';
+    throw new Error('资料已登记，文件传输未确认。请用“补充缺失文件”重试。' + detail);
+  }
+  await cloudMaterial(ownerId, item.id, (value) => value.kind === 'file' && value.removing !== true);
   state.missingId = '';
   state.error = false;
   state.message = `“${item.name}”已上传。`;
@@ -265,39 +274,41 @@ async function addLink(state: State, name: string, value: string): Promise<void>
     id: crypto.randomUUID(), termId: state.context.termId, courseId: state.context.courseId,
     name: safeName(name), kind: 'link', url: url.href,
   };
-  await state.context.update((data) => { (data.prepMaterials ??= []).push(item); });
-  state.error = false;
-  state.message = `“${item.name}”已添加。`;
+  const outcome = await state.context.update((data) => { (data.prepMaterials ??= []).push(item); });
+  writeStatus(state, outcome, `“${item.name}”已添加。`);
 }
 async function rename(state: State, id: string, value: string): Promise<void> {
   const name = safeName(value);
   const current = material(state, id);
-  await state.context.update((data) => {
+  const outcome = await state.context.update((data) => {
     const item = data.prepMaterials?.find((row) =>
       row.id === id && row.termId === current.termId && row.courseId === current.courseId);
-    if (!item) throw new Error('资料已变化，请刷新后重试。');
+    if (!item || item.removing) throw new Error('资料已变化，请刷新后重试。');
     item.name = name;
   });
-  state.error = false;
-  state.message = '资料名称已保存。';
+  writeStatus(state, outcome, '资料名称已保存。');
 }
 async function remove(state: State, id: string): Promise<void> {
   const ownerId = await owner();
   const current = material(state, id);
-  await state.context.update((data) => {
+  const marked = await state.context.update((data) => {
     const item = data.prepMaterials?.find((row) =>
       row.id === id && row.termId === current.termId && row.courseId === current.courseId);
-    if (!item) throw new Error('资料已变化，请刷新后重试。');
+    if (!item || item.kind !== current.kind) throw new Error('资料已变化，请刷新后重试。');
     item.removing = true;
   });
-  await cloudMaterial(ownerId, id, (value) => value.removing === true);
+  if (marked !== 'confirmed') {
+    writeStatus(state, marked, '', '同步后请点击“继续删除”。');
+    return;
+  }
+  await cloudMaterial(ownerId, id, (value) => value.kind === current.kind && value.removing === true);
   if (current.kind === 'file') {
     const { error } = await client().storage.from(BUCKET)
       .remove([prepMaterialPath(ownerId, id)]);
     if (error) throw new Error(`删除云端文件失败。${error.message}`);
     await ensureOwner(ownerId);
   }
-  await state.context.update((data) => {
+  const outcome = await state.context.update((data) => {
     const index = data.prepMaterials?.findIndex((row) =>
       row.id === id && row.termId === current.termId && row.courseId === current.courseId) ?? -1;
     if (index < 0 || data.prepMaterials?.[index].removing !== true) {
@@ -306,8 +317,7 @@ async function remove(state: State, id: string): Promise<void> {
     data.prepMaterials.splice(index, 1);
   });
   state.missingId = state.missingId === id ? '' : state.missingId;
-  state.error = false;
-  state.message = '资料已删除。';
+  writeStatus(state, outcome, '资料已删除。');
 }
 async function getBytes(state: State, id: string): Promise<{ item: PrepMaterial; blob: Blob }> {
   const ownerId = await owner();
@@ -385,29 +395,34 @@ async function restore(state: State, id: string, file: File): Promise<void> {
   const current = material(state, id);
   if (current.kind !== 'file' || current.removing) throw new Error('该资料当前不能补充文件。');
   const ownerId = await owner();
-  await state.context.update((data) => {
-    if (!data.prepMaterials?.some((item) => item.id === id)) throw new Error('资料已变化，请刷新后重试。');
+  const outcome = await state.context.update((data) => {
+    if (!data.prepMaterials?.some((item) => item.id === id && item.kind === 'file' && !item.removing)) {
+      throw new Error('资料已变化，请刷新后重试。');
+    }
   });
-  await cloudMaterial(ownerId, id, (value) => value.removing !== true);
+  if (outcome !== 'confirmed') {
+    writeStatus(state, outcome, '', '同步后可继续补充文件。');
+    return;
+  }
+  await cloudMaterial(ownerId, id, (value) => value.kind === 'file' && value.removing !== true);
   const result = await putObject(ownerId, id, file, safeMime(file.type));
+  await cloudMaterial(ownerId, id, (value) => value.kind === 'file' && value.removing !== true);
   if (result === 'exists') {
     state.missingId = '';
     state.error = false;
     state.message = '云端文件已存在；为保护不可变对象，未覆盖文件或修改名称、类型和大小。';
     return;
   }
-  await ensureOwner(ownerId);
-  await state.context.update((data) => {
+  const updated = await state.context.update((data) => {
     const item = data.prepMaterials?.find((row) =>
       row.id === id && row.termId === current.termId && row.courseId === current.courseId);
-    if (!item) throw new Error('资料已变化，文件已上传但元数据未更新。');
+    if (!item || item.removing || item.kind !== 'file') throw new Error('资料已变化，文件已上传但元数据未更新。');
     item.filename = safeFilename(file.name);
     item.mime = safeMime(file.type);
     item.bytes = file.size;
   });
   state.missingId = '';
-  state.error = false;
-  state.message = '文件已补充到原资料。';
+  writeStatus(state, updated, '文件已补充到原资料。');
 }
 async function act(state: State, container: HTMLElement, message: string, task: () => Promise<void>): Promise<void> {
   if (state.busy) return; state.busy = true; state.error = false;

@@ -259,6 +259,45 @@ on conflict (id) do update
   set public = false,
       file_size_limit = 26214400;
 
+-- Storage can authorize before streaming and finish under its service role.
+-- Serialize the actual object insert with desk_commit's deletion marker.
+create function desk_private.guard_prep_object_insert() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  path_owner uuid;
+  caller uuid := auth.uid();
+  file_id text := split_part(new.name,'/',2);
+begin
+  if new.name !~ '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then
+    raise exception 'New row violates row-level security for prep file' using errcode='42501';
+  end if;
+  path_owner := split_part(new.name,'/',1)::uuid;
+  if (caller is not null or current_setting('role',true) in ('anon','authenticated'))
+    and caller is distinct from path_owner then
+    raise exception 'New row violates row-level security for prep file' using errcode='42501';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(path_owner::text,0));
+  if not exists (
+    select 1 from public.desk_entities material
+    where material.user_id = path_owner
+      and material.kind = 'prepMaterials'
+      and lower(material.id) = file_id
+      and not material.deleted
+      and material.payload->>'kind' = 'file'
+      and material.payload->>'removing' is distinct from 'true'
+  ) then
+    raise exception 'New row violates row-level security for prep file' using errcode='42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function desk_private.guard_prep_object_insert() from public, anon, authenticated;
+
+create trigger desk_prep_object_insert_guard
+  before insert on storage.objects
+  for each row when (new.bucket_id = 'desk-prep-files')
+  execute function desk_private.guard_prep_object_insert();
+
 drop policy if exists desk_prep_files_select on storage.objects;
 create policy desk_prep_files_select on storage.objects
   for select to authenticated
